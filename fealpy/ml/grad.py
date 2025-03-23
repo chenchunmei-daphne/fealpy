@@ -13,6 +13,9 @@ def gradient(output: Tensor, input: Tensor,
         create_graph=create_graph,
         allow_unused=allow_unused
     )[0]
+    if g is None:
+        raise ValueError(f"Gradient for input '{input}' with respect to output '{output}' is None.")
+
     if split:
         return torch.split(g, 1, dim=-1)
     return g

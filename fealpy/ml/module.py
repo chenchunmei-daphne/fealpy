@@ -156,7 +156,7 @@ class TensorMapping(Module):
         @return: error.
         """
         from fealpy.functionspace.function import Function
-        # from ...functionspace.Function import Function
+
         if isinstance(other, Function):
             mesh = other.space.mesh
 
@@ -168,13 +168,13 @@ class TensorMapping(Module):
             coordtype = o_coordtype
 
         qf = mesh.quadrature_formula(q, etype='cell')
-        # qf = mesh.integrator(q, etype='cell')
+
         bcs, ws = qf.get_quadrature_points_and_weights()
         cellmeasure = mesh.entity_measure('cell')
 
         if coordtype in {'cartesian', 'c'}:
 
-            ps = mesh.bc_to_point(bcs)
+            ps = mesh.bc_to_point(bcs).numpy()
             val = self.from_numpy(ps, device=device, last_dim=True).cpu().detach().numpy()
             if squeeze:
                 val = val.squeeze(-1)
@@ -190,7 +190,7 @@ class TensorMapping(Module):
         else:
             raise ValueError(f"Invalid coordtype '{coordtype}'.")
 
-        # e = np.einsum('q, qc..., c -> c...', ws, diff, cellmeasure)
+
         e = np.einsum('q, cq..., c -> c...', ws, diff, cellmeasure)
         if cell_type:
             return np.power(e, 1/power, out=e)

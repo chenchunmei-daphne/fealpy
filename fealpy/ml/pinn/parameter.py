@@ -1,19 +1,54 @@
-
+import torch.nn as nn
+from fealpy.mesh import TriangleMesh
+from fealpy.ml.sampler import ISampler, BoxBoundarySampler
+from fealpy.backend import backend_manager as bm
+bm.set_backend('pytorch')
 
 class Parameter():
-    def __init__(self, npde=200, nbc=100, iter=400, lr=0.01):
+    def __init__(self, NN=32, npde=200, nbc=100, iter=200, lr=0.01, k=1.0,
+                 domain=(-0.5, 0.5, -0.5, 0.5), nx=64, ny=64,
+                 step_size = 50, betas=(0.9, 0.99),  gamma=0.9):
         '''
         @brief: Module's hyperparameters.
+
+        @param NN:
+
         @param npde: number of points for Partial Differential Equations (PDE).
         @param nbc: number of points for boundary conditions (BC).
         @param iter: number of iterations for model training.
         @param lr: learning rate.
+        @param k: wave number.
+
+        @param domain:
+        @param nx:
+        @param nx:
+        @param ny:
+
+        @para step_size:
+        @para betas:
+        @para gamma:
+
         @return: none.
         '''
+
+        self.NN = self._check(NN,'NN')
         self.npde = self._check(npde, "npde")
         self.nbc = self._check(nbc, "nbc")
         self.iter = self._check(iter, "iter")
         self.lr = lr
+        self.k = k
+
+        self.domain = domain    # 网格参数
+        self.nx = self._check(nx, 'nx')
+        self.ny = self._check(ny, 'ny')
+        self.mesh = TriangleMesh.from_box(self.domain, nx=self.nx, ny=self.ny)
+
+        self.step_size = self._check(step_size,'step_size')
+        self.betas = betas
+        self.gamma = gamma
+
+        self.samplerpde = ISampler(self.domain, requires_grad=True)
+        self.samplerbc = BoxBoundarySampler(self._bc(self.domain, 0), self._bc(self.domain, 1), requires_grad=True)
 
     @staticmethod
     def _check(value, name):
@@ -21,4 +56,18 @@ class Parameter():
             raise ValueError(f"{name} must be a positive integer.")
         return value
 
+    @staticmethod
+    def _bc(domain, location):
+        '''
+        @para domain: 方程的区域
+        @para location: 0 | 1，location=0，返回 BoxBoundarySampler 第一个参数
+        '''
+        return domain[location::2]
+    def net(self):
+        d = len(self.domain) // 2  # 数据的维数
+        net = nn.Sequential(nn.Linear(d, self.NN, dtype=bm.float64), nn.Tanh(),
+                              nn.Linear(self.NN, self.NN // 2, dtype=bm.float64), nn.Tanh(),
+                              nn.Linear(self.NN // 2, self.NN // 4, dtype=bm.float64), nn.Tanh(),
+                              nn.Linear(self.NN // 4, 1, dtype=bm.float64))    # 默认 nn.Linear 的数据类型为 torch.float32
 
+        return net
