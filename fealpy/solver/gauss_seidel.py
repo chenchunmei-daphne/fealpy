@@ -12,7 +12,7 @@ from .. import logger
 class SupportsMatmul(Protocol):
     def __matmul__(self, other: TensorLike) -> TensorLike: ...
 
-def gs(A: SupportsMatmul, b: TensorLike, x0: Optional[TensorLike]=None,
+def gauss_seidel(A: SupportsMatmul, b: TensorLike, x0: Optional[TensorLike]=None,
        atol: float=1e-12, rtol: float=1e-8,
        maxit: Optional[int]=10000,returninfo: bool=False) -> TensorLike:
     
@@ -82,5 +82,5 @@ def gs(A: SupportsMatmul, b: TensorLike, x0: Optional[TensorLike]=None,
     info['niter'] = niter 
     if returninfo is True:
         return x, info
-    if returninfo is True:
+    else:
         return x
