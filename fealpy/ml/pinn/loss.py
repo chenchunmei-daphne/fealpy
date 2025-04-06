@@ -11,7 +11,11 @@ class Pinn_loss():
         @param bc_fun: Function representing the boundary conditions.
         @param npde: int. Number of sample points inside the domain. Defaults to 200.
         @param nbc: int. Number of sample points on the boundary. Defaults to 100.
-
+        @param reduction: 'none' | 'mean' | 'sum'.
+            - If 'none': no reduction will be applied,
+            - If 'mean': the sum of the output will be divided by the number of elements in the output,
+            - If 'sum': the output will be summed.
+            Defaults to 'mean'.
         """
 
         self.pde = pde_fun
@@ -22,7 +26,7 @@ class Pinn_loss():
 
     def helmholtz_loss(self, samplerpde, samplerbc, real_net, imag_net, flag=None):
         '''
-        @brief: Compute the loss function for the PINN model solving the Helmholtz equation.
+        @brief: Compute the mean squared error (squared L2 norm) function for the PINN model solving the Helmholtz equation.
 
         @param samplerpde: Sampler for generating points inside the domain, generated using ISampler from fealpy.ml.sampler.
         @param samplerbc: Sampler for generating points on the boundary, generated using BoxBoundarySampler from fealpy.ml.sampler.
