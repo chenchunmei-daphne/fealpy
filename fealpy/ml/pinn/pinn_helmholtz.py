@@ -22,20 +22,17 @@ net_imag = para.net()  # 虚部
 s_1 = Solution(net_real)   # 网络实例化
 s_2 = Solution(net_imag)
 
-
 # 选择优化器
-optim_1 = Adam(s_1.parameters(), lr=para.lr, betas=para.betas)  # 实部
-optim_2 = Adam(s_2.parameters(), lr=para.lr, betas=para.betas)    # 虚部
-lr_scheduer_1 = StepLR(optimizer=optim_1, step_size=para.step_size, gamma=para.gamma)  # 学习率调整
-lr_scheduer_2 = StepLR(optimizer=optim_2, step_size=para.step_size, gamma=para.gamma)
+optim_1 = Adam(s_1.parameters(), lr=para.lr, betas=(0.9, 0.99))  # 实部
+optim_2 = Adam(s_2.parameters(), lr=para.lr, betas=(0.9, 0.99))    # 虚部
+lr_scheduer_1 = StepLR(optimizer=optim_1, step_size=para.step_size, gamma=0.9)  # 学习率调整
+lr_scheduer_2 = StepLR(optimizer=optim_2, step_size=para.step_size, gamma=0.9)
 
-
+# 训练过程
 error_sum = []  #误差初始化
 error_real = []
 error_imag = []
 
-
-# 训练过程
 for epoch in range(para.iter+1):
     optim_1.zero_grad()
     optim_2.zero_grad()
@@ -59,7 +56,9 @@ for epoch in range(para.iter+1):
         error_imag.append(error_imag_)
         error_sum.append(l.detach().numpy())
 
-        print(f"Epoch: {epoch}, Loss: {l}, Error_real:{error_real_}, Error_imag:{error_imag_}")
+        print(f"Epoch: {epoch}, Loss: {l}")
+        print(f"Error_real:{error_real_}, Error_imag:{error_imag_}")
+        print('\n')
 
 # 结果展示
 fig_mesh = plot_mesh(mesh=mesh, solution=helmholtz.solution, s1=s_1, s2=s_2)

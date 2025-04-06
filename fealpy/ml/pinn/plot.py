@@ -4,7 +4,9 @@ bm.set_backend('pytorch')
 def plot_error(**errors):
     '''
     @brief: Plot a line chart.
+
     @param **errors: Accepts multiple error parameters with names to plot multiple error curves.
+
     @return: Returns the line chart.
     '''
     # 获取调用该函数时的变量名
@@ -33,14 +35,15 @@ def plot_error(**errors):
 def plot_mesh(mesh, solution, s1, s2):
     '''
       @brief: Plot a heatmap of the numerical solution of the equation, where different color intensities represent different data values.
+
       @param mesh: The mesh of the equation's domain.
       @param solution: The true solution of the partial differential equation.
       @param s1, s2: Respectively correspond to the neural networks for the real and imaginary parts of the solution.
+
       @return: Returns the heatmap.
       '''
 
     bc_ = bm.tensor([1 / 3, 1 / 3, 1 / 3], dtype=bm.float64)
-    # ps = bm.tensor(mesh.bc_to_point(bc_), dtype=bm.float64)
     ps = mesh.bc_to_point(bc_)
 
     u_real = bm.real(solution(ps)).detach().numpy()
@@ -52,10 +55,10 @@ def plot_mesh(mesh, solution, s1, s2):
     fig, axes = plt.subplots(2, 2, figsize=(8, 8))
 
     # 设置子图标题
-    axes[0, 0].set_title('True Solution Real Part')
-    axes[0, 1].set_title('True Solution Imag Part')
-    axes[1, 0].set_title('Pinn Module Solution Real Part')
-    axes[1, 1].set_title('Pinn Module Solution Imaginary Part')
+    axes[0, 0].set_title('Real Part of True Solution')
+    axes[0, 1].set_title('Imag Part of True Solution')
+    axes[1, 0].set_title("Real Part of Pinn Module's Solution")
+    axes[1, 1].set_title("Imag Part of Pinn Module's Solution")
 
     mesh.add_plot(axes[0, 0], cellcolor=u_real, linewidths=0, aspect=1)
     mesh.add_plot(axes[0, 1], cellcolor=u_imag, linewidths=0, aspect=1)

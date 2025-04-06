@@ -69,12 +69,13 @@ R = ScalarRobinBCIntegrator(coef=kappa, q=p+2)
 f = ScalarSourceIntegrator(pde.source, q=p+2)
 Vr = ScalarRobinSourceIntegrator(pde.robin, q=p+2)
 
+NDof = bm.zeros(maxit, dtype=bm.int64, device=args.device)
+
 for i in range(maxit):
 
     n = ns*(2**i)
     mesh = TriangleMesh.from_box(domain, nx=n, ny=n)
     mesh.ftype = complex
-    NDof = bm.zeros(maxit, dtype=bm.int64, device=args.device)
     space = LagrangeFESpace(mesh, p=p)
     NDof[i] = space.number_of_global_dofs()
     tmr.send(f'第{i}次空间时间')
