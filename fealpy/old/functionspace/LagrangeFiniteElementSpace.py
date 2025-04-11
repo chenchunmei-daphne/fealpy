@@ -713,7 +713,7 @@ class LagrangeFiniteElementSpace():
         NC = mesh.number_of_cells()
         NF = mesh.number_of_faces()
 
-        isFaceDof = (mesh.multi_index_matrix(p) == 0) 
+        isFaceDof = (mesh.multi_index_matrix(p, etype=q) == 0)
         cell2face = mesh.ds.cell_to_face()
         cell2facesign = mesh.ds.cell_to_face_sign()
 
