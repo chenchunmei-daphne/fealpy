@@ -1,32 +1,39 @@
-# from fealpy.ml.pinn import parameter
-# import torch as bm
-
 import torch
+
 from torch import Tensor
 from numpy.typing import NDArray
+
 from fealpy.backend import backend_manager as bm
 bm.set_backend('pytorch')
 
 
 class Helmholtz2d():
+    """
+    A class representing the 2D Helmholtz equation with methods for solution, gradient,
+    source term, PDE formulation, and Robin boundary conditions.
+
+    Parameters:
+        k: Wave number for the Helmholtz equation.
+        domain: The computational domain for the equation.
+    """
     def __init__(self, k, domain):
-        """
-        @param k: wave number.
-        """
         self.k = bm.tensor(k)
         self.domain = domain
-
         c1 = bm.cos(self.k) + bm.sin(self.k)*1j
         c2 = torch.special.bessel_j0(self.k) + torch.special.bessel_j1(self.k)*1j
         self.c = c1 / c2    # 方程中的常数
 
 
     def solution(self, p: Tensor) -> Tensor:
-        '''
-        @brief: 2 维 Helmholtz 方程的真解.
+        """
+        The exact solution of the 2D Helmholtz equation.
 
-        @para p: 二维张量且类型为 Tensor.
-        '''
+        Parameters:
+            p: Input tensor representing spatial coordinates (2D).
+
+        Returns:
+            Tensor: The exact solution at given points.
+        """
         x = p[..., 0:1]
         y = p[..., 1:2]
         r = bm.sqrt(x ** 2 + y ** 2)
@@ -35,32 +42,43 @@ class Helmholtz2d():
         return val
 
     def solution_numpy_real(self, p: NDArray) -> NDArray:
-        '''
-        @brief: 方程真解的实部.
-        @para p: 二维张量且类型为 Numpy.
-        @return: 返回的张量的类型是 Numpy.
-        '''
+        """
+        The real part of the exact solution, with numpy array input/output.
+
+        Parameters:
+            p: Input numpy array representing spatial coordinates.
+
+        Returns:
+            NDArray: The real part of the solution at given points.
+        """
         sol = self.solution(bm.tensor(p))
         real_ = bm.real(sol)
         return real_.detach().numpy()
 
     def solution_numpy_imag(self, p: NDArray) -> NDArray:
-        '''
-        @brief: 方程真解的虚部.
-        @para p: 二维张量且类型为 Numpy.
-        @return: 返回的张量的类型是 Numpy.
-        '''
+        """
+           The imaginary part of the exact solution, with numpy array input/output.
+
+           Parameters:
+               p: Input numpy array representing spatial coordinates.
+
+           Returns:
+               NDArray: The imaginary part of the solution at given points.
+           """
         sol = self.solution(bm.tensor(p))
         imag_ = bm.imag(sol)
         return imag_.detach().numpy()
 
     def source(self, p: Tensor) -> Tensor:
-        '''
-        @brief: 2 维 Helmholtz 方程的源项.
-        @para p: 二维张量且类型为 Tensor.
-        @return: 返回源项 f.
-        '''
+        """
+        The source term of the 2D Helmholtz equation.
 
+        Parameters:
+            p: Input tensor representing spatial coordinates.
+
+        Returns:
+            Tensor: The source term at given points.
+        """
         x = p[..., 0:1]
         y = p[..., 1:2]
         r = bm.sqrt(x ** 2 + y ** 2)
@@ -69,12 +87,15 @@ class Helmholtz2d():
         return f
 
     def grad(self, p: Tensor) -> Tensor:
-        '''
-        @brief: 方程真解的梯度.
-        @para p: 二维张量且类型为 Tensor.
-        @return: 返回的张量的类型是Tensor.
-        '''
+        """
+        The gradient of the exact solution.
 
+        Parameters:
+            p: Input tensor representing spatial coordinates.
+
+        Returns:
+            Tensor: The gradient of the solution at given points.
+        """
         x = p[..., 0:1]
         y = p[..., 1:2]
         r = bm.sqrt(x ** 2 + y ** 2)
@@ -87,14 +108,17 @@ class Helmholtz2d():
 
 
     def pde(self, p: Tensor, real_net, imag_net) -> Tensor:
-        '''
-        @brief: 2 维 Helmholtz 方程的真解的 PDE.
+        """
+        The PDE formulation of the 2D Helmholtz equation.
 
-        @para p: 二维张量且类型为 Tensor.
+        Parameters:
+            p: Input tensor representing spatial coordinates.
+            real_net: Network for real part of the solution.
+            imag_net: Network for imaginary part of the solution.
 
-        @return: u_xx + u_yy + k ** 2 * u + f.
-        '''
-
+        Returns:
+            Tensor: The PDE residual u_xx + u_yy + k**2 * u + f.
+        """
         from fealpy.ml import gradient
 
         u = real_net(p)+ imag_net(p)*1j
@@ -116,13 +140,17 @@ class Helmholtz2d():
 
 
     def robin_bc(self, p: Tensor, real_net, imag_net) -> Tensor:
-        '''
-        @brief: 2 维 Helmholtz 方程的 Robin 边界条件.
+        """
+        The Robin boundary condition for the 2D Helmholtz equation.
 
-        @para p: 二维张量且类型为 Tensor.
+        Parameters:
+            p: Input tensor representing spatial coordinates.
+            real_net: Network for real part of the solution.
+            imag_net: Network for imaginary part of the solution.
 
-        @return: 返回的张量的类型是Tensor.
-        '''
+        Returns:
+            Tensor: The Robin boundary condition residual.
+        """
 
         from fealpy.ml import gradient
 

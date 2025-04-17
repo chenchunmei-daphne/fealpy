@@ -29,9 +29,9 @@ lr_scheduer_1 = StepLR(optimizer=optim_1, step_size=para.step_size, gamma=0.9)  
 lr_scheduer_2 = StepLR(optimizer=optim_2, step_size=para.step_size, gamma=0.9)
 
 # 训练过程
-error_sum = []  #误差初始化
-error_real = []
-error_imag = []
+loss_sum = []  #误差初始化
+loss_real = []
+loss_imag = []
 
 for epoch in range(para.iter+1):
     optim_1.zero_grad()
@@ -49,18 +49,18 @@ for epoch in range(para.iter+1):
     lr_scheduer_2.step()
 
     if epoch % 50 == 0:
-        error_real_ = s_1.estimate_error(helmholtz.solution_numpy_real, mesh, coordtype='c')
-        error_imag_ = s_2.estimate_error(helmholtz.solution_numpy_imag, mesh, coordtype='c')
+        loss_real_ = s_1.estimate_error(helmholtz.solution_numpy_real, mesh, coordtype='c')
+        loss_imag_ = s_2.estimate_error(helmholtz.solution_numpy_imag, mesh, coordtype='c')
 
-        error_real.append(error_real_)
-        error_imag.append(error_imag_)
-        error_sum.append(l.detach().numpy())
+        loss_real.append(loss_real_)
+        loss_imag.append(loss_imag_)
+        loss_sum.append(l.detach().numpy())
 
-        print(f"Epoch: {epoch}, Loss: {l}")
-        print(f"Error_real:{error_real_}, Error_imag:{error_imag_}")
+        print(f"Epoch: {epoch}, loss_sum: {l}")
+        print(f"loss_real:{loss_real_}, loss_imag:{loss_imag_}")
         print('\n')
 
 # 结果展示
 fig_mesh = plot_mesh(mesh=mesh, solution=helmholtz.solution, s1=s_1, s2=s_2)
-fig_error = plot_error(error_real = error_real, error_imag=error_imag, error=error_sum)
+fig_error = plot_error(loss_real = loss_real, loss_imag=loss_imag, loss_sum=loss_sum)
 plt.show()
