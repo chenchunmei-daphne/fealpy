@@ -6,7 +6,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 from fealpy.ml import Solution
 
-from fealpy.ml.pinn import  Pinn_loss, plot_error, plot_mesh, Helmholtz2d
+from fealpy.ml.helmholtz_pinn import  Pinn_loss, plot_error, plot_mesh, Helmholtz2d
 import argparse
 from parameter import configs  # 导入配置字典
 

@@ -4,33 +4,34 @@ bm.set_backend('numpy')
 
 from fealpy.mesh import UniformMesh1d
 from fealpy.sparse import csr_matrix, spdiags
+from scipy.special import jv
 
 
-# [0, 1] 区间均匀剖分 10 段，每段长度 0.1
-nx = 10
-hx = 1/nx
-mesh = UniformMesh1d([0, nx], h=hx, origin=0.0)
+def solution( p):
+    print('solution___')
+    k = 1
+    x = p[..., 0]
+    y = p[..., 1]
+    r = np.sqrt(x**2 + y**2)
+
+    val = np.zeros(x.shape, dtype=np.complex128)
+    val[:] = np.cos(k*r)/k
+    c = complex(np.cos(k), np.sin(k))/complex(jv(0, k), jv(1, k))/k
+    val -= c*jv(0, k*r)
 
 
-def laplace_operator(self):
-    """
-    @brief 组装 Laplace 算子 ∆u 对应的有限差分离散矩阵
+    print('c=', c, flush=True)  # 添加 flush=True
+    print('jv(0, k*r)', jv(0, k*r), flush=True)
+    print('val', val, flush=True)
 
-    @note 并未处理边界条件
-    """
-    h = self.h
-    cx = 1/(h**2)
-    NN = self.number_of_nodes()
-    K = np.arange(NN)
+    return val
 
-    A = spdiags(bm.ones(NN), diags=0, M=NN, N=NN)
-    print(type(A))
-    val = np.broadcast_to(-cx, (NN-1, ))
-    I = K[1:]
-    J = K[0:-1]
-    A = A + csr_matrix((val, (I, J)), shape=(NN, NN))
-    A = A +  csr_matrix((val, (J, I)), shape=(NN, NN))
-    return A
-
-A=laplace_operator(mesh)
-print(A)
+from fealpy.pde.helmholtz_2d import HelmholtzData2d
+pde = HelmholtzData2d(k=1)
+print('122222222222')
+p = bm.tensor([[0, 1], [1, 2]])
+a = solution(p=p)
+print(p)
+print(a)
+print()
+print()

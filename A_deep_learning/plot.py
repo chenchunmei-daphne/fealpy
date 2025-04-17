@@ -10,4 +10,4 @@ def plot(*mse):
         axes[i].legend()  # 添加图例
     plt.show()
 
-
+print('----------q')

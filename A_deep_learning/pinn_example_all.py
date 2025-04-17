@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from fealpy.mesh import TriangleMesh
 from fealpy.ml import gradient
 from fealpy.ml import Solution
-from fealpy.ml.pinn import Parameter, loss, plot
+from fealpy.ml.helmholtz_pinn import Parameter, loss, plot
 
 para = Parameter()
 

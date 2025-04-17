@@ -2,9 +2,12 @@ import torch
 
 from torch import Tensor
 from numpy.typing import NDArray
+from scipy.special import jv
 
 from fealpy.backend import backend_manager as bm
 bm.set_backend('pytorch')
+
+from fealpy.decorator import cartesian
 
 
 class Helmholtz2d():
@@ -16,14 +19,18 @@ class Helmholtz2d():
         k: Wave number for the Helmholtz equation.
         domain: The computational domain for the equation.
     """
-    def __init__(self, k, domain):
+    def __init__(self, k=1.0):
         self.k = bm.tensor(k)
-        self.domain = domain
+
         c1 = bm.cos(self.k) + bm.sin(self.k)*1j
-        c2 = torch.special.bessel_j0(self.k) + torch.special.bessel_j1(self.k)*1j
+        c2 = jv(0, self.k) + 1j * jv(1, self.k)
+        # c2 = torch.special.bessel_j0(self.k) + torch.special.bessel_j1(self.k)*1j
         self.c = c1 / c2    # 方程中的常数
 
+    def domain(self):
+        return (-1.0, 1.0, -1.0, 1.0)
 
+    @cartesian
     def solution(self, p: Tensor) -> Tensor:
         """
         The exact solution of the 2D Helmholtz equation.
@@ -69,6 +76,7 @@ class Helmholtz2d():
         imag_ = bm.imag(sol)
         return imag_.detach().numpy()
 
+    @cartesian
     def source(self, p: Tensor) -> Tensor:
         """
         The source term of the 2D Helmholtz equation.
@@ -79,14 +87,15 @@ class Helmholtz2d():
         Returns:
             Tensor: The source term at given points.
         """
-        x = p[..., 0:1]
-        y = p[..., 1:2]
+        x = p[..., 0]
+        y = p[..., 1]
         r = bm.sqrt(x ** 2 + y ** 2)
         f = bm.zeros(x.shape, dtype=bm.complex128)
         f[:] = bm.sin(self.k * r) / r  # 源项
         return f
 
-    def grad(self, p: Tensor) -> Tensor:
+    @cartesian
+    def gradient(self, p: Tensor) -> Tensor:
         """
         The gradient of the exact solution.
 
@@ -106,8 +115,17 @@ class Helmholtz2d():
         val[..., 1:2] = u_r * y / r
         return val
 
+    @cartesian
+    def robin(self, p, n):
+        x = p[..., 0]
+        y = p[..., 1]
+        grad = self.gradient(p) # (NC, NQ, dof_numel)
+        val = bm.sum(grad*n[:, bm.newaxis, :], axis=-1)
+        kappa = bm.broadcast_to(bm.tensor(1j * self.k), shape=x.shape)
+        val += kappa*self.solution(p) 
+        return val
 
-    def pde(self, p: Tensor, real_net, imag_net) -> Tensor:
+    def pde_func(self, p: Tensor, real_net, imag_net) -> Tensor:
         """
         The PDE formulation of the 2D Helmholtz equation.
 
@@ -138,8 +156,8 @@ class Helmholtz2d():
 
         return u_xx + u_yy + self.k ** 2 * u + f
 
-
-    def robin_bc(self, p: Tensor, real_net, imag_net) -> Tensor:
+    
+    def robin_func(self, p: Tensor, real_net, imag_net) -> Tensor:
         """
         The Robin boundary condition for the 2D Helmholtz equation.
 
@@ -169,7 +187,7 @@ class Helmholtz2d():
         grad_u = grad_u_real + grad_u_imag * 1j
 
         kappa = bm.tensor(0.0) + self.k * 1j
-        g = (self.grad(p) * n).sum(dim=-1, keepdim=True) + kappa * self.solution(p)
+        g = (self.gradient(p) * n).sum(dim=-1, keepdim=True) + kappa * self.solution(p)
 
         return (grad_u * n).sum(dim=-1, keepdim=True) + kappa * u - g
 

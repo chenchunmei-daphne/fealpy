@@ -2,17 +2,26 @@
 import matplotlib.pyplot as plt
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
+
+from fealpy.mesh import TriangleMesh
+
 from fealpy.ml import Solution
+from  fealpy.ml.sampler import ISampler, BoxBoundarySampler
 
-from fealpy.ml.pinn import Parameter, Pinn_loss, plot_error, plot_mesh, Helmholtz2d
+from fealpy.ml.helmholtz_pinn import Parameter, Pinn_loss, plot_error, plot_mesh, Helmholtz2d
 
 
-para = Parameter()  # 超参数
-helmholtz =  Helmholtz2d(para.k, para.domain)  # 方程
-loss = Pinn_loss(pde_fun=helmholtz.pde, bc_fun=helmholtz.robin_bc, npde=para.npde, nbc=para.nbc)  # 损失函数，内含采样
-mesh = para.mesh  # 有限元网格
-samplerpde = para.samplerpde  # 区域内部的采样器
-samplerbc =  para.samplerbc   # 区域边界的采样器
+para = Parameter(iter=50)  # 超参数
+helmholtz =  Helmholtz2d()  # 方程
+loss = Pinn_loss(pde_fun=helmholtz.pde_func, bc_fun=helmholtz.robin_func, npde=para.npde, nbc=para.nbc)  # 损失函数，内含采样
+
+domain = helmholtz.domain()    # 网格参数
+nx, ny = 64, 64
+mesh = TriangleMesh.from_box(domain, nx=nx, ny=ny)
+
+samplerpde = ISampler(domain, requires_grad=True)  # 采样器
+samplerbc = BoxBoundarySampler(domain[0::2], domain[1::2], requires_grad=True)
+
 
 
 # 定义网络层结构
