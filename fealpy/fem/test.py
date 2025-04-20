@@ -47,6 +47,87 @@ from typing import Optional, Literal, Union
 # a = A.to_global_dof()
 # print(a)
 
+'''
+@assemblymethod('fast')
+    def fast_assembly(self, space: _FS, /, indices=None) -> TensorLike:
+        """
+        快速组装方法(针对单纯形网格优化)，支持Helmholtz方程
+        
+        参数:
+            space: 有限元空间
+            indices: 选择的面的索引
+            
+        返回:
+            罚项矩阵(CSR格式)
+        """
+        mesh = space.mesh
+        TD = mesh.top_dimension()
+        GD = mesh.geo_dimension()
+        
+        if TD != GD:
+            raise ValueError("只支持拓扑维度和几何维度相同的网格")
+            
+        # 如果不是单纯形网格，回退到标准组装方法
+        if not isinstance(mesh, SimplexMesh):
+            return self.assembly(space, indices=indices)
+            
+        # 获取积分点和权重
+        bcs, ws = self.fetch_qf(space)
+        # 获取面的度量
+        fm = self.fetch_measure(space, indices)
+        # 获取单位法向量
+        n = self.fetch_face_unit_normal(space, indices)
+        
+        # 获取参考空间梯度
+        gphi_ref = space.grad_basis(bcs, index=self.entity_selection(indices), variable='u')
+        
+        # 计算Jacobian矩阵和第一基本形式
+        J = mesh.jacobi_matrix(bcs, index=self.entity_selection(indices), etype='face')
+        G = mesh.first_fundamental_form(J)
+        G_inv = bm.linalg.inv(G)
+        scale = bm.sqrt(bm.linalg.det(G))
+        
+        # 将梯度从参考空间转换到物理空间
+        gphi_physical = bm.einsum('qfdi, fdij, f -> qfdj', gphi_ref, G_inv, scale)
+        # 计算法向导数
+        gphi_n = bm.einsum('qfdj, fj -> qfd', gphi_physical, n)
+        
+        # 处理内部面和罚项系数
+        index = self.entity_selection(indices)
+        is_inner_face = ~mesh.boundary_face_flag()
+        if indices is not None:
+            is_inner_face = is_inner_face[indices]
+        inner_index = index[is_inner_face[index]]
+        
+        coef = self._process_coef(self.coef, bcs, mesh, index)
+        
+        # 计算罚项矩阵
+        if self.complex_mode:
+            # 复数情况: 分别计算实部和虚部
+            P_real = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                             ws, gphi_n.real, gphi_n.real, fm, coef.real)
+            P_imag = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                             ws, gphi_n.imag, gphi_n.imag, fm, coef.imag)
+            P = P_real + P_imag
+        else:
+            # 实数情况
+            P = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                         ws, gphi_n, gphi_n, fm, coef)
+        
+        # 组装稀疏矩阵
+        face2dof = space.face_to_dof(index=inner_index)
+        I = bm.broadcast_to(face2dof[:, :, None], shape=P.shape)
+        J = bm.broadcast_to(face2dof[:, None, :], shape=P.shape)
+        
+        gdof = space.number_of_global_dofs()
+        from ..backend import csr_matrix, is_complex
+        # 确定矩阵数据类型
+        dtype = np.complex128 if (self.complex_mode or is_complex(coef)) else np.float64
+        # 创建CSR格式稀疏矩阵
+        P = csr_matrix((P.ravel(), (I.ravel(), J.ravel())), shape=(gdof, gdof), dtype=dtype)
+        
+        return P
+'''
 from fealpy.mesh import TriangleMesh, TetrahedronMesh
 from fealpy.functionspace import LagrangeFESpace
 mesh = TriangleMesh.from_box()
