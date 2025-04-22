@@ -127,36 +127,156 @@ from typing import Optional, Literal, Union
         P = csr_matrix((P.ravel(), (I.ravel(), J.ravel())), shape=(gdof, gdof), dtype=dtype)
         
         return P
-'''
-from fealpy.mesh import TriangleMesh, TetrahedronMesh
-from fealpy.functionspace import LagrangeFESpace
-mesh = TriangleMesh.from_box()
-space = LagrangeFESpace(mesh=mesh)
 
-# space 
-print(space.face_to_dof().shape, space.face_to_dof()[0])
-
-# mesh
-print(mesh.quadrature_formula(q=3, etype='face'))
-print(mesh.number_of_faces())
-print(mesh.face_unit_normal().shape)
-'''
-    @enable_cache
-    def to_global_dof(self, space: _FS, /, indices=None) -> TensorLike:
-        """获取面(边)上的全局自由度索引"""
-        return space.face_to_dof(index=self.entity_selection(indices))
-
-    @enable_cache
-    def fetch_qf(self, space: _FS):
-        """获取积分公式(积分点和权重)"""
+    def assembly(self, space: _FS, /, indices=None) -> TensorLike:
+        """
+        标准组装方法,支持Helmholtz方程和2D/3D
+        
+        参数:
+            space: 有限元空间
+            indices: 选择的面的索引
+            
+        返回:
+            罚项矩阵(CSR格式)
+        """
         mesh = space.mesh
-        p = space.p
-        # 默认积分阶数为p+3
-        q = p + 3 if self.q is None else self.q  
-        # 获取面的积分公式
-        qf = mesh.quadrature_formula(q, 'face')
-        # 返回积分点坐标和权重
-        bcs, ws = qf.get_quadrature_points_and_weights()
-        return bcs, ws
+        TD = mesh.top_dimension()  # 拓扑维度
+        GD = mesh.geo_dimension()  # 几何维度
+        
+        # 检查网格维度是否一致
+        if TD != GD:
+            raise ValueError("只支持拓扑维度和几何维度相同的网格")
+        
+        # 获取积分点和权重
+        bcs, ws = self.fetch_qf(space)
+        # 获取面的度量(长度/面积)
+        fm = self.fetch_measure(space, indices)
+        # 获取单位法向量
+        n = self.fetch_face_unit_normal(space, indices)
+        # 获取基函数梯度
+        gphi = self.fetch_face_grad_basis(space, indices)
+        
+        # 选择内部面(边)
+        index = self.entity_selection(indices)
+        is_inner_face = ~mesh.boundary_face_flag()
+        if indices is not None:
+            is_inner_face = is_inner_face[indices]
+        inner_index = index[is_inner_face[index]]
+        
+        # 处理罚项系数
+        coef = self._process_coef(self.coef, bcs, mesh, index)
+        
+        # 计算法向导数跳量 (NQ, NF, ldof)
+        gphi_n = bm.einsum('qfdi, fi -> qfd', gphi, n)
+        
+        # 只考虑内部面的贡献
+        gphi_n_inner = gphi_n[is_inner_face[index]]
+        fm_inner = fm[is_inner_face[index]]
+        coef_inner = coef[is_inner_face[index]] if bm.ndim(coef) > 0 else coef
+        
+        # 计算罚项矩阵 (NF_inner, ldof, ldof)
+        if self.complex_mode:
+            # 复数情况: 分别计算实部和虚部
+            P_real = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                             ws, gphi_n_inner.real, gphi_n_inner.real, fm_inner, coef_inner.real)
+            P_imag = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                             ws, gphi_n_inner.imag, gphi_n_inner.imag, fm_inner, coef_inner.imag)
+            P = P_real + P_imag
+        else:
+            # 实数情况
+            P = bm.einsum('q, qfi, qfj, f, f -> fij', 
+                         ws, gphi_n_inner, gphi_n_inner, fm_inner, coef_inner)
+        
+        # 获取全局自由度
+        face2dof = space.face_to_dof(index=inner_index)
+        
+        # 组装稀疏矩阵
+        I = bm.broadcast_to(face2dof[:, :, None], shape=P.shape)
+        J = bm.broadcast_to(face2dof[:, None, :], shape=P.shape)
+        
+        gdof = space.number_of_global_dofs()
+        from ..backend import csr_matrix, is_complex
+        # 确定矩阵数据类型
+        dtype = np.complex128 if (self.complex_mode or is_complex(coef)) else np.float64
+        # 创建CSR格式稀疏矩阵
+        P = csr_matrix((P.ravel(), (I.ravel(), J.ravel())), shape=(gdof, gdof), dtype=dtype)
+        
+        return P
+
 '''
+
+from fealpy.backend import backend_manager as bm
+
+from typing import Optional
+from ..typing import TensorLike, SourceLike, Threshold
+from ..mesh import HomogeneousMesh
+from ..functionspace.space import FunctionSpace as _FS
+from ..utils import process_coef_func
+from ..functional import bilinear_integral
+
+from .integrator import (
+    LinearInt, OpInt, CellInt,
+    enable_cache,
+    assemblymethod,
+    CoefLike
+)
+class ScalarRobinBCIntegrator(LinearInt, OpInt, CellInt):
+    def __init__(self, coef: Optional[CoefLike]=None, q: Optional[int]=None, *,
+                 threshold: Optional[Threshold]=None,
+                 batched: bool=False):
+        super().__init__()
+        self.coef = coef
+        self.q = q
+        self.threshold = threshold
+        self.batched = batched
+
+    @enable_cache
+    def make_index(self, space: _FS):
+        threshold = self.threshold
+
+        if isinstance(threshold, TensorLike):
+            index = threshold
+        else:
+            mesh = space.mesh
+            index = mesh.boundary_face_index()
+            if callable(threshold):
+                bc = mesh.entity_barycenter('face', index=index)
+                index = index[threshold(bc)]
+        return index
+    
+    @enable_cache
+    def to_global_dof(self, space: _FS) -> TensorLike:
+        index = self.make_index(space)
+        return space.face_to_dof(index=index)
+    
+    @enable_cache
+    def fetch(self, space: _FS):
+        index = self.make_index(space)
+        mesh = space.mesh
+
+        if not isinstance(mesh, HomogeneousMesh):
+            raise RuntimeError("The ScalarRobinBCIntegrator only support spaces on"
+                               f"homogeneous meshes, but {type(mesh).__name__} is"
+                               "not a subclass of HomoMesh.")
+
+        n = mesh.face_unit_normal(index=index)
+        facemeasure = mesh.entity_measure('face', index=index)
+
+        q = space.p+3 if self.q is None else self.q
+        qf = mesh.quadrature_formula(q, 'face')
+        bcs, ws = qf.get_quadrature_points_and_weights()
+        phi = space.face_basis(bcs)
+
+        return bcs, ws, phi, facemeasure, n
+    
+    def assembly(self, space: _FS):
+        coef = self.coef
+        mesh = getattr(space, 'mesh', None)
+        bcs, ws, phi, cm, index = self.fetch(space)
+        val = process_coef_func(coef, bcs=bcs, mesh=mesh, etype='cell', index=index)
+
+        return bilinear_integral(phi, phi, ws, cm, val, batched=self.batched)
+
+
+
 

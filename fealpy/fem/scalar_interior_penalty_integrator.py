@@ -1,16 +1,17 @@
 from typing import Optional, Literal, Union
-from ..mesh.mesh_base import Mesh, SimplexMesh
-from ..backend import backend_manager as bm
-from ..typing import TensorLike, Index
-from ..utils import process_coef_func
-from ..functionspace.space import FunctionSpace as _FS
+from fealpy.mesh.mesh_base import Mesh, SimplexMesh
+from fealpy.backend import backend_manager as bm
+from fealpy.typing import TensorLike, Index
+from fealpy.utils import process_coef_func
+from fealpy.functionspace.space import FunctionSpace as _FS
+
 from .integrator import (
     LinearInt, OpInt, FaceInt,
     enable_cache,
     assemblymethod,
     CoefLike
 )
-import numpy as np
+
 
 class InteriorPenaltyMatrixIntegrator(LinearInt, OpInt, FaceInt):
     r"""
@@ -100,76 +101,20 @@ class InteriorPenaltyMatrixIntegrator(LinearInt, OpInt, FaceInt):
 
     @assemblymethod('assembly')
     def assembly(self, space: _FS, /, indices=None) -> TensorLike:
-        """
-        标准组装方法，支持Helmholtz方程和2D/3D
-        
-        参数:
-            space: 有限元空间
-            indices: 选择的面的索引
-            
-        返回:
-            罚项矩阵(CSR格式)
-        """
-        mesh = space.mesh
-        TD = mesh.top_dimension()  # 拓扑维度
-        GD = mesh.geo_dimension()  # 几何维度
-        
-        # 检查网格维度是否一致
-        if TD != GD:
-            raise ValueError("只支持拓扑维度和几何维度相同的网格")
-        
-        # 获取积分点和权重
-        bcs, ws = self.fetch_qf(space)
-        # 获取面的度量(长度/面积)
-        fm = self.fetch_measure(space, indices)
-        # 获取单位法向量
-        n = self.fetch_face_unit_normal(space, indices)
-        # 获取基函数梯度
-        gphi = self.fetch_face_grad_basis(space, indices)
-        
-        # 选择内部面(边)
-        index = self.entity_selection(indices)
-        is_inner_face = ~mesh.boundary_face_flag()
-        if indices is not None:
-            is_inner_face = is_inner_face[indices]
-        inner_index = index[is_inner_face[index]]
-        
-        # 处理罚项系数
-        coef = self._process_coef(self.coef, bcs, mesh, index)
-        
-        # 计算法向导数跳量 (NQ, NF, ldof)
-        gphi_n = bm.einsum('qfdi, fi -> qfd', gphi, n)
-        
-        # 只考虑内部面的贡献
-        gphi_n_inner = gphi_n[is_inner_face[index]]
-        fm_inner = fm[is_inner_face[index]]
-        coef_inner = coef[is_inner_face[index]] if bm.ndim(coef) > 0 else coef
-        
-        # 计算罚项矩阵 (NF_inner, ldof, ldof)
-        if self.complex_mode:
-            # 复数情况: 分别计算实部和虚部
-            P_real = bm.einsum('q, qfi, qfj, f, f -> fij', 
-                             ws, gphi_n_inner.real, gphi_n_inner.real, fm_inner, coef_inner.real)
-            P_imag = bm.einsum('q, qfi, qfj, f, f -> fij', 
-                             ws, gphi_n_inner.imag, gphi_n_inner.imag, fm_inner, coef_inner.imag)
-            P = P_real + P_imag
-        else:
-            # 实数情况
-            P = bm.einsum('q, qfi, qfj, f, f -> fij', 
-                         ws, gphi_n_inner, gphi_n_inner, fm_inner, coef_inner)
-        
-        # 获取全局自由度
-        face2dof = space.face_to_dof(index=inner_index)
-        
-        # 组装稀疏矩阵
-        I = bm.broadcast_to(face2dof[:, :, None], shape=P.shape)
-        J = bm.broadcast_to(face2dof[:, None, :], shape=P.shape)
-        
-        gdof = space.number_of_global_dofs()
-        from ..backend import csr_matrix, is_complex
-        # 确定矩阵数据类型
-        dtype = np.complex128 if (self.complex_mode or is_complex(coef)) else np.float64
-        # 创建CSR格式稀疏矩阵
-        P = csr_matrix((P.ravel(), (I.ravel(), J.ravel())), shape=(gdof, gdof), dtype=dtype)
-        
-        return P
+        pass
+    
+
+from fealpy.mesh import TriangleMesh, TetrahedronMesh
+from fealpy.functionspace import LagrangeFESpace
+mesh = TriangleMesh.from_one_triangle()
+space = LagrangeFESpace(mesh=mesh)
+
+print(mesh.entity('node'))
+
+# space 
+print(space.face_to_dof().shape, space.face_to_dof())
+
+# mesh
+print(mesh.quadrature_formula(q=3, etype='face'))
+print(mesh.number_of_faces())
+print(mesh.face_unit_normal())
