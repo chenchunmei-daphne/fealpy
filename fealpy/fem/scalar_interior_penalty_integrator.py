@@ -5,7 +5,7 @@ from fealpy.typing import TensorLike, Index
 from fealpy.utils import process_coef_func
 from fealpy.functionspace.space import FunctionSpace as _FS
 
-from .integrator import (
+from fealpy.fem.integrator import (
     LinearInt, OpInt, FaceInt,
     enable_cache,
     assemblymethod,
@@ -103,18 +103,33 @@ class InteriorPenaltyMatrixIntegrator(LinearInt, OpInt, FaceInt):
     def assembly(self, space: _FS, /, indices=None) -> TensorLike:
         pass
     
-
+import matplotlib.pyplot as plt
 from fealpy.mesh import TriangleMesh, TetrahedronMesh
 from fealpy.functionspace import LagrangeFESpace
-mesh = TriangleMesh.from_one_triangle()
+
+mesh = TriangleMesh.from_box(box=[0, 3, 0, 3], nx =3, ny=3)
 space = LagrangeFESpace(mesh=mesh)
 
-print(mesh.entity('node'))
-
+node = mesh.node
+face = mesh.face
+NN = mesh.number_of_nodes()
+NF = mesh.number_of_faces()
+print("NN=", NN, 'node.shape:', node.shape)
+print("NF=", NF, 'face.shape:', face.shape)
+print("face\n", face)
 # space 
-print(space.face_to_dof().shape, space.face_to_dof())
+print('space.face_to_dof().shape', space.face_to_dof().shape)
+print("face\n", face)
+print('space.face_to_dof()', space.face_to_dof())
 
 # mesh
-print(mesh.quadrature_formula(q=3, etype='face'))
-print(mesh.number_of_faces())
-print(mesh.face_unit_normal())
+# print(mesh.quadrature_formula(q=3, etype='face'))
+# print(mesh.number_of_faces())
+# print(mesh.face_unit_normal())
+
+# fig = plt.figure()
+# axes = fig.add_subplot()
+# mesh.add_plot(axes=axes)
+# mesh.find_face(axes=axes,showindex=True)
+# mesh.find_node(axes=axes,showindex=True)
+# plt.show()
