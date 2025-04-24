@@ -35,7 +35,7 @@ from .vector_source_integrator import VectorSourceIntegrator
 from .scalar_robin_bc_integrator import ScalarRobinBCIntegrator
 from .face_mass_integrator import BoundaryFaceMassIntegrator, InterFaceMassIntegrator
 from .fluid_boundary_friction_integrator import FluidBoundaryFrictionIntegrator
-from .scalar_interior_penalty_integrator import ScalarInteriorPenaltyIntegrator
+# from .scalar_interior_penalty_integrator import ScalarInteriorPenaltyIntegrator
 
 ### Face Source
 from .scalar_neumann_bc_integrator import ScalarNeumannBCIntegrator, ScalarRobinSourceIntegrator

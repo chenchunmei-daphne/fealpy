@@ -8,11 +8,11 @@ from fealpy.mesh import TriangleMesh
 from fealpy.ml import Solution
 from  fealpy.ml.sampler import ISampler, BoxBoundarySampler
 
-from fealpy.ml.helmholtz_pinn import Parameter, Pinn_loss, plot_error, plot_mesh, Helmholtz2d
+from fealpy.ml.helmholtz_pinn import Parameter, Pinn_loss, plot_error, plot_mesh, HelmholtzData2d
 
 
-para = Parameter(iter=50)  # 超参数
-helmholtz =  Helmholtz2d()  # 方程
+para = Parameter()  # 超参数
+helmholtz =  HelmholtzData2d()  # 方程
 loss = Pinn_loss(pde_fun=helmholtz.pde_func, bc_fun=helmholtz.robin_func, npde=para.npde, nbc=para.nbc)  # 损失函数，内含采样
 
 domain = helmholtz.domain()    # 网格参数

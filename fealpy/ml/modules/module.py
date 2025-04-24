@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, device, float64
 from torch.nn import Module
 
-from .tools import proj
+from ..tools import proj
 from fealpy.ml.nntyping import VectorFunction, TensorFunction
 
 

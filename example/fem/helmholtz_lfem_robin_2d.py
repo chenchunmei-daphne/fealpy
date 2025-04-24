@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from fealpy import logger
 logger.setLevel('WARNING')
 from fealpy.backend import backend_manager as bm
-from fealpy.pde.helmholtz_2d import HelmholtzData2d
+# from fealpy.pde.helmholtz_2d import HelmholtzData2d
+from fealpy.ml.helmholtz_pinn  import HelmholtzData2d
 from fealpy.mesh import TriangleMesh
 from fealpy.functionspace import LagrangeFESpace
 from fealpy.fem import ScalarDiffusionIntegrator, ScalarMassIntegrator, ScalarRobinBCIntegrator     
@@ -57,7 +58,7 @@ kappa = k * 1j
 tmr = timer()
 next(tmr)
 
-pde = HelmholtzData2d(k=k) 
+pde = HelmholtzData2d(k=k, backend=args.backend) 
 domain = pde.domain()
 
 errorMatrix = bm.zeros((4, maxit), dtype=bm.float64)
