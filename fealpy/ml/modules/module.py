@@ -328,7 +328,25 @@ class ZeroMapping(Module):
 
 class Solution(TensorMapping):
     """
-    @brief Wrap a tensor function to be a TensorMapping object.
+    A wrapper class that converts a tensor function into a TensorMapping object,
+    providing a standardized interface for neural network solutions in PDE problems.
+
+    Parameters:
+        func: A callable TensorFunction - Must accept and return PyTorch tensors.
+              Typically a torch.nn.Module instance or lambda function.
+
+    Properties:
+        net: Alias for the wrapped function (for backward compatibility)
+        func: Access to the original function
+
+    Methods:
+        forward(p): Evaluates the wrapped function at input points p.
+
+    Example:
+        >>> net = nn.Sequential(nn.Linear(2, 64), nn.Tanh())
+        >>> sol = Solution(net)  # Now compatible with fealpy's PDE solvers
+        >>> points = torch.rand(100, 2)
+        >>> outputs = sol(points)  # Forward pass through the network
     """
     def __init__(self, func: TensorFunction) -> None:
         super().__init__()
@@ -336,13 +354,24 @@ class Solution(TensorMapping):
 
     @property
     def net(self):
+        """Getter for the wrapped network function"""
         return self.__func
 
     @property
     def func(self):
+        """Getter for the original function"""
         return self.__func
 
     def forward(self, p: Tensor) -> Tensor:
+        """
+        Forward pass through the wrapped tensor function.
+
+        Parameters:
+            p: Input tensor of shape (..., d), where d is the input dimension.
+
+        Returns:
+            Tensor: Output tensor of shape (..., k), where k is the output dimension.
+        """
         return self.__func(p)
 
 

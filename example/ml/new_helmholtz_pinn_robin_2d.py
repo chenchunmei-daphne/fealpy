@@ -7,24 +7,27 @@ bm.set_backend('pytorch')
 import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
-from fealpy.typing import TensorLike
-from fealpy.mesh import TriangleMesh
 from fealpy.ml.grad import gradient
 from fealpy.ml.modules import Solution
 from fealpy.ml.sampler import BoxBoundarySampler, ISampler
+from fealpy.mesh import TriangleMesh
 from fealpy.ml.helmholtz_pinn import HelmholtzData2d
+from fealpy.typing import TensorLike
 
 # 超参数
 num_of_point_pde = 200  # 区域内部的采样点数
 num_of_point_bc = 100   # 区域边界上的采样点数
 lr = 0.01
 iteration = 200 
-k = 1.0   # 波数
-NN = 32
+NN = 32  # 隐藏层单元数
 
 # PDE 
+k = 1.0   # 波数
 pde = HelmholtzData2d(k=k, backend="pytorch")
 domain = pde.domain()
+
+# 构建网格和有限元空间
+mesh = TriangleMesh.from_box(box=domain, nx=64, ny=64)
 
 
 # 定义网络层结构
@@ -59,10 +62,6 @@ scheduler_1 = StepLR(optim_1, step_size=50, gamma=0.9)
 scheduler_2 = StepLR(optim_2, step_size=50, gamma=0.9)
 
 # 采样器
-# samplerpde_1 = ISampler([[-0.5, 0.5], [-0.5, 0.5]], requires_grad=True)
-# samplerpde_2 = ISampler([[-0.5, 0.5], [-0.5, 0.5]], requires_grad=True)
-# samplerbc_1 = BoxBoundarySampler([-0.5, -0.5], [0.5, 0.5], requires_grad=True)
-# samplerbc_2 = BoxBoundarySampler([-0.5, -0.5], [0.5, 0.5], requires_grad=True)
 samplerpde_1 = ISampler(ranges=domain, requires_grad=True)
 samplerpde_2 = ISampler(ranges=domain, requires_grad=True)
 bc1, bc2 = domain[0::2], domain[1::2]  # bc1=(-0.5, -0.5), bc2=(0.5, 0.5)
@@ -105,14 +104,10 @@ def mse_bc_fun(p: TensorLike) -> TensorLike:
     grad_u = grad_u_real + 1j * grad_u_imag
 
     kappa = bm.tensor(0.0 + 1j * k)
-    # Robin 边界条件右端项 g
-    # g = (pde.gradient(p) * n).sum(dim=-1, keepdim=True) + kappa * pde.solution(p)
     g = pde.robin(p=p, n=n)
 
     return (grad_u*n).sum(dim=-1, keepdim=True) + kappa * u - g
 
-# 构建网格和有限元空间
-mesh = TriangleMesh.from_box(box=domain, nx=64, ny=64)
 
 # 训练过程
 start_time = time.time()
@@ -177,7 +172,7 @@ end_time = time.time()     # 记录结束时间
 training_time = end_time - start_time   # 计算训练时间
 print("训练时间为：", training_time, "秒")
 
-
+# 损失、实部与虚部的误差的变化曲线
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
 y_real = range(1, 10*len(Error_real) +1,10)
 y_imag = range(1, 10*len(Error_imag) +1,10)
@@ -193,6 +188,8 @@ ax2.legend()  # 添加图例
 
 plt.tight_layout()
 
+
+# 可视化网格对比图
 bc_ = bm.array([1/3, 1/3, 1/3], dtype=bm.float64)
 ps = mesh.bc_to_point(bc_)
 
@@ -201,7 +198,6 @@ u_imag = bm.imag(pde.solution(ps)).detach().numpy()
 up_real = s_1(ps).detach().numpy()
 up_imag = s_2(ps).detach().numpy()
 
-# 可视化
 fig, axes = plt.subplots(2, 2)
 axes[0, 0].set_title('Real Part of True Solution')
 axes[0, 1].set_title('Imag Part of True Solution')

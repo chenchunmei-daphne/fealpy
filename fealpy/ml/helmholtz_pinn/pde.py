@@ -79,8 +79,6 @@ class HelmholtzData2d():
         elif bm.backend_name == 'numpy':
             x = p[..., 0]
             y = p[..., 1]
-        # x = p[..., 0:1]
-        # y = p[..., 1:2]
         r = bm.sqrt(x ** 2 + y ** 2)
         val = bm.zeros(x.shape, dtype=bm.complex128)
         val[:] = (bm.cos(self.k * r) - self.c * bessel_function(v=0, x=self.k * r)) / self.k
@@ -208,69 +206,4 @@ class HelmholtzData2d():
         print("f:", f)
         print(u.diff(x).subs({r:R}))
         print(u.diff(y).subs({r:R}))
-
-
-    def pde_func(self, p: TensorLike, real_net, imag_net) -> TensorLike:
-        """
-        The PDE formulation of the 2D Helmholtz equation.
-
-        Parameters:
-            p: Input tensor representing spatial coordinates.
-            real_net: Network for real part of the solution.
-            imag_net: Network for imaginary part of the solution.
-
-        Returns:
-            Tensor: The PDE residual u_xx + u_yy + k**2 * u + f.
-        """
-        from fealpy.ml import gradient
-
-        u = real_net(p)+ imag_net(p)*1j
-
-        u_x_real, u_y_real = gradient(u.real, p, create_graph=True, split=True)
-        u_xx_real, _ = gradient(u_x_real, p, create_graph=True, split=True)
-        _, u_yy_real = gradient(u_y_real, p, create_graph=True, split=True)
-
-        u_x_imag, u_y_imag = gradient(u.imag, p, create_graph=True, split=True)
-        u_xx_imag, _ = gradient(u_x_imag, p, create_graph=True, split=True)
-        _, u_yy_imag = gradient(u_y_imag, p, create_graph=True, split=True)
-
-        u_xx = u_xx_real + u_xx_imag*1j
-        u_yy = u_yy_real + u_yy_imag*1j
-
-        f = self.source(p)  # 源项
-
-        return u_xx + u_yy + self.k ** 2 * u + f
-
-    def robin_func(self, p: TensorLike, real_net, imag_net) -> TensorLike:
-        """
-        The Robin boundary condition for the 2D Helmholtz equation.
-
-        Parameters:
-            p: Input tensor representing spatial coordinates.
-            real_net: Network for real part of the solution.
-            imag_net: Network for imaginary part of the solution.
-
-        Returns:
-            Tensor: The Robin boundary condition residual.
-        """
-
-        from fealpy.ml import gradient
-
-        u = real_net(p) + imag_net(p) * 1j  # 数值解
-        x = p[..., 0]
-        y = p[..., 1]
-        n = bm.zeros_like(p)  # 法向量 n
-        n[x > bm.abs(y), 0] = 1.0
-        n[y > bm.abs(x), 1] = 1.0
-        n[x < -bm.abs(y), 0] = -1.0
-        n[y < -bm.abs(x), 1] = -1.0
-
-        grad_u_real = gradient(u.real, p, create_graph=True, split=False)  # 数值解的梯度
-        grad_u_imag = gradient(u.imag, p, create_graph=True, split=False)
-        grad_u = grad_u_real + grad_u_imag * 1j
-
-        kappa = bm.tensor(0.0) + self.k * 1j
-        g = (self.gradient(p) * n).sum(dim=-1, keepdim=True) + kappa * self.solution(p) # Robin 边界条件右端项
-
-        return (grad_u * n).sum(dim=-1, keepdim=True) + kappa * u - g
 
