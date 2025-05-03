@@ -1,11 +1,11 @@
-from typing import Optional, Literal, Union
-from fealpy.mesh.mesh_base import Mesh, SimplexMesh
-from fealpy.backend import backend_manager as bm
-from fealpy.typing import TensorLike, Index
-from fealpy.utils import process_coef_func
-from fealpy.functionspace.space import FunctionSpace as _FS
-
-from fealpy.fem.integrator import (
+from typing import Optional
+from ..backend import backend_manager as bm
+from ..typing import TensorLike, Threshold
+from ..mesh import HomogeneousMesh
+from ..functionspace.space import FunctionSpace as _FS
+from ..utils import process_coef_func
+from ..functional import bilinear_integral
+from .integrator import (
     LinearInt, OpInt, FaceInt,
     enable_cache,
     assemblymethod,
@@ -13,123 +13,129 @@ from fealpy.fem.integrator import (
 )
 
 
-class InteriorPenaltyMatrixIntegrator(LinearInt, OpInt, FaceInt):
-    r"""
-    内罚有限元罚项矩阵积分子,支持Helmholtz方程和2D/3D问题
-    
-    参数:
-        coef: 罚项系数，可以是实数或复数
-        q: 积分阶数
-        region: 积分区域
-        batched: 是否使用批处理模式
-        method: 积分方法 ('fast', 'assembly')
-        complex_mode: 是否处理复数情况
-    """
-    def __init__(self, 
-                 coef: Optional[Union[CoefLike, complex]] = None, 
-                 q: Optional[int] = None, 
-                 *,     
-                 batched: bool = False,
-                 method: Literal['fast', 'assembly', None] = None) -> None:
-        super().__init__(method=method if method else 'assembly')
-        self.coef = coef  
+
+class _PenaltyMassIntegrator(LinearInt, OpInt, FaceInt):
+    def __init__(self, coef: Optional[CoefLike]=None, q: Optional[int]=None, *,
+                 threshold: Optional[Threshold]=None,
+                 batched: bool=False):
+        super().__init__()
+        self.coef = coef
         self.q = q
+        self.threshold = threshold
         self.batched = batched
 
     @enable_cache
-    def to_global_dof(self, space: _FS, /, indices=None) -> TensorLike:
-        """获取面(边)上的全局自由度索引"""
-        return space.face_to_dof(index=self.entity_selection(indices))
+    def to_global_dof(self, space: _FS) -> TensorLike:
+        index = self.make_index(space)
+        mesh = getattr(space, 'mesh', None)
+        p = getattr(space, 'p', None)
+
+        TD = mesh.top_dimension()
+        NF = mesh.number_of_faces()
+        NC = mesh.number_of_cells()
+
+        isFaceDof = (mesh.multi_index_matrix(p,TD) == 0)  # 多重指标
+        cell2face = mesh.cell_to_face()
+        cell2facesign = mesh.cell_to_face_sign()
+
+        ldof = space.number_of_local_dofs() 
+        fdof = space.number_of_local_dofs('face') 
+        ndof = ldof - fdof
+        face2dof = bm.zeros((NF, fdof + 2*ndof), dtype=bm.int32)   # *2: 左右两边
+        cell2dof = space.cell_to_dof()
+
+        for i in range(TD+1): 
+
+            lidx, = bm.nonzero( cell2facesign[:, i]) 
+            ridx, = bm.nonzero(~cell2facesign[:, i]) 
+            idx0, = bm.nonzero( isFaceDof[:, i]) 
+            idx1, = bm.nonzero(~isFaceDof[:, i]) 
+
+            fidx = cell2face[:, i] 
+            face2dof[fidx[lidx, None], bm.arange(fdof,      fdof+  ndof)] = cell2dof[lidx[:, None], idx1] 
+            face2dof[fidx[ridx, None], bm.arange(fdof+ndof, fdof+2*ndof)] = cell2dof[ridx[:, None], idx1]
+
+
+            idx = bm.argsort(cell2dof[:, isFaceDof[:, i]], axis=1) 
+            face2dof[fidx, 0:fdof] = cell2dof[:, isFaceDof[:, i]][bm.arange(NC)[:, None], idx] 
+
+        return face2dof[index]
 
     @enable_cache
-    def fetch_qf(self, space: _FS):
-        """获取积分公式(积分点和权重)"""
-        mesh = space.mesh
-        p = space.p
-        q = p + 3 if self.q is None else self.q  
-        qf = mesh.quadrature_formula(q, 'face') # 获取面的积分公式
-        bcs, ws = qf.get_quadrature_points_and_weights()  # 返回积分点坐标和权重
-        return bcs, ws
+    def fetch(self, space: _FS):
+        q = self.q
+        index = self.make_index(space)
+        mesh = getattr(space, 'mesh', None)
+        p = getattr(space, 'p', None)
 
-    @enable_cache
-    def fetch_measure(self, space: _FS, /, indices=None):
-        """获取面的度量(长度/面积)"""
-        mesh = space.mesh
-        return mesh.entity_measure('face', index=self.entity_selection(indices))
+        # if not isinstance(mesh, HomogeneousMesh):
+        #     raise RuntimeError("The ScalarMassIntegrator only support spaces on"
+        #                        f"homogeneous meshes, but {type(mesh).__name__} is"
+        #                        "not a subclass of HomoMesh.")
 
-    @enable_cache
-    def fetch_face_unit_normal(self, space: _FS, /, indices=None):
-        """获取面的单位法向量"""
-        mesh = space.mesh
-        return mesh.face_unit_normal(index=self.entity_selection(indices))
+        cm = mesh.entity_measure('face', index=index)
+        q = space.p+3 if self.q is None else self.q
+        qf = mesh.quadrature_formula(q, 'face')
+        bcs, ws = qf.get_quadrature_points_and_weights()
 
-    @enable_cache
-    def fetch_face_grad_basis(self, space: _FS, /, indices=None):
-        """获取基函数在面上的梯度"""
-        bcs = self.fetch_qf(space)[0]  # 获取积分点坐标
-        return space.grad_basis(bcs, index=self.entity_selection(indices), variable='x')
+        NF = mesh.number_of_faces()
+        TD = mesh.top_dimension()
+        NQ = len(ws)
 
-    def _process_coef(self, coef, bcs, mesh, index):
-        """
-        处理罚项系数，支持复数
-        
-        参数:
-            coef: 输入的罚项系数
-            bcs: 重心坐标
-            mesh: 网格对象
-            index: 面索引
-            
-        返回:
-            处理后的系数值
-        """
-        # 默认系数为1.0(实数或复数)
-        if coef is None:
-            return 1.0 if not self.complex_mode else 1.0 + 0j
-        
-        # 如果是简单数值类型，直接返回
-        if isinstance(coef, (float, int, complex)):
-            return coef
-        
-        # 处理空间变化的系数
-        coef = process_coef_func(coef, bcs=bcs, mesh=mesh, etype='face', index=index)
-        
-        # 如果需要复数模式但系数是实数，转换为复数
-        if self.complex_mode and bm.isreal(coef).all():
-            coef = coef + 0j  
-            
-        return coef
+        ldof = space.number_of_local_dofs() 
+        fdof = space.number_of_local_dofs('face') 
+        ndof = ldof - fdof
+        cell2face = mesh.cell_to_face()
+        cell2dof = space.cell_to_dof()
+        isFaceDof = (mesh.multi_index_matrix(p,TD) == 0) 
+        cell2facesign = mesh.cell_to_face_sign()
 
-    @assemblymethod('assembly')
-    def assembly(self, space: _FS, /, indices=None) -> TensorLike:
-        pass
-    
-import matplotlib.pyplot as plt
-from fealpy.mesh import TriangleMesh, TetrahedronMesh
-from fealpy.functionspace import LagrangeFESpace
+        n = mesh.face_unit_normal()
 
-mesh = TriangleMesh.from_box(box=[0, 3, 0, 3], nx =3, ny=3)
-space = LagrangeFESpace(mesh=mesh)
+        phi = bm.zeros((NF, NQ, fdof + 2*ndof),dtype=bm.float64)
+        for i in range(TD+1):
 
-node = mesh.node
-face = mesh.face
-NN = mesh.number_of_nodes()
-NF = mesh.number_of_faces()
-print("NN=", NN, 'node.shape:', node.shape)
-print("NF=", NF, 'face.shape:', face.shape)
-print("face\n", face)
-# space 
-print('space.face_to_dof().shape', space.face_to_dof().shape)
-print("face\n", face)
-print('space.face_to_dof()', space.face_to_dof())
+            lidx, = bm.nonzero( cell2facesign[:, i]) 
+            ridx, = bm.nonzero(~cell2facesign[:, i]) 
+            idx0, = bm.nonzero( isFaceDof[:, i]) 
+            idx1, = bm.nonzero(~isFaceDof[:, i]) 
 
-# mesh
-# print(mesh.quadrature_formula(q=3, etype='face'))
-# print(mesh.number_of_faces())
-# print(mesh.face_unit_normal())
+            fidx = cell2face[:, i] 
+            idx = bm.argsort(cell2dof[:, isFaceDof[:, i]], axis=1) 
 
-# fig = plt.figure()
-# axes = fig.add_subplot()
-# mesh.add_plot(axes=axes)
-# mesh.find_face(axes=axes,showindex=True)
-# mesh.find_node(axes=axes,showindex=True)
-# plt.show()
+            b = bm.insert(bcs, i, 0, axis=1)
+
+            cval = bm.einsum('cqlm, cm->cql', space.grad_basis(b), n[cell2face[:, i]])
+            phi[fidx[ridx, None],:, bm.arange(fdof+ndof, fdof+2*ndof)] = +cval[ridx[:, None],:, idx1]
+            phi[fidx[lidx, None],:, bm.arange(fdof,      fdof+  ndof)] = -cval[lidx[:, None],:, idx1]
+
+            phi[fidx[ridx, None],:, bm.arange(0, fdof)] += cval[ridx[:, None],:, idx0[idx[ridx, :]]]
+            phi[fidx[lidx, None],:, bm.arange(0, fdof)] -= cval[lidx[:, None],:, idx0[idx[lidx, :]]] 
+        phi = phi[index]
+
+        return bcs, ws, phi, cm, index
+
+    def assembly(self, space: _FS) -> TensorLike:
+        coef = self.coef
+        mesh = getattr(space, 'mesh', None)
+        bcs, ws, phi, cm, index = self.fetch(space)
+
+
+        val = process_coef_func(coef, bcs=bcs, mesh=mesh, etype='face', index=index)
+
+        return bilinear_integral(phi, phi, ws, cm*cm, val, batched=self.batched)
+
+class InnerPenaltyMassIntegrator( _PenaltyMassIntegrator):
+    def make_index(self, space: _FS):
+        threshold = self.threshold
+
+        if isinstance(threshold, TensorLike):
+            index = threshold
+        else:
+            mesh = space.mesh
+            face2cell = mesh.face_to_cell()
+            index = face2cell[:, 0] != face2cell[:, 1]
+            if callable(threshold):
+                bc = mesh.entity_barycenter('face', index=index)
+                index = index[threshold(bc)]
+        return index
