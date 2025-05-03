@@ -6,6 +6,26 @@ from torch.autograd import grad
 
 def gradient(output: Tensor, input: Tensor,
              create_graph=False, allow_unused=False, split: bool=False):
+    """
+        Compute the gradient of the output with respect to the input tensor.
+        
+        This function calculates the gradient using automatic differentiation and provides
+        options for further computation and handling of special cases.
+
+        Parameters:
+            output: The output tensor for which to compute gradients.
+            input: The input tensor with respect to which gradients are computed.
+            create_graph: If True, graph of the derivative will be constructed, allowing
+                        computation of higher order derivatives. Default is False.
+            allow_unused: If True, allows unused parameters in the computation graph.
+                        Default is False.
+            split: If True, splits the gradient tensor along the last dimension.
+                   Default is False.
+
+        Returns:
+            Tensor or tuple[Tensor]: The computed gradient(s). Returns a single tensor unless
+                                    split=True, in which case returns a tuple of tensors.
+    """
     g = grad(
         outputs=output,
         inputs=input,

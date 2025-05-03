@@ -8,4 +8,5 @@ from .collocator import (
     Collocator, CircleCollocator, LineCollocator, QuadrangleCollocator,
     PolygonCollocator, SphereCollocator
 )
-from .sampler import BoxBoundarySampler, ISampler
+from .sampler import ISampler, BoxBoundarySampler
+
