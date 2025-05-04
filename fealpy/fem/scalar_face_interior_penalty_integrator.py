@@ -14,7 +14,7 @@ from .integrator import (
 
 
 
-class _PenaltyMassIntegrator(LinearInt, OpInt, FaceInt):
+class ScalarFaceInteriorPenaltyIntegrator(LinearInt, OpInt, FaceInt):
     def __init__(self, coef: Optional[CoefLike]=None, q: Optional[int]=None, *,
                  threshold: Optional[Threshold]=None,
                  batched: bool=False):
@@ -23,6 +23,21 @@ class _PenaltyMassIntegrator(LinearInt, OpInt, FaceInt):
         self.q = q
         self.threshold = threshold
         self.batched = batched
+
+    @enable_cache
+    def make_index(self, space: _FS):
+        threshold = self.threshold
+
+        if isinstance(threshold, TensorLike):
+            index = threshold
+        else:
+            mesh = space.mesh
+            face2cell = mesh.face_to_cell()
+            index = face2cell[:, 0] != face2cell[:, 1]
+            if callable(threshold):
+                bc = mesh.entity_barycenter('face', index=index)
+                index = index[threshold(bc)]
+        return index
 
     @enable_cache
     def to_global_dof(self, space: _FS) -> TensorLike:
@@ -119,23 +134,7 @@ class _PenaltyMassIntegrator(LinearInt, OpInt, FaceInt):
         coef = self.coef
         mesh = getattr(space, 'mesh', None)
         bcs, ws, phi, cm, index = self.fetch(space)
-
-
         val = process_coef_func(coef, bcs=bcs, mesh=mesh, etype='face', index=index)
 
         return bilinear_integral(phi, phi, ws, cm*cm, val, batched=self.batched)
 
-class InnerPenaltyMassIntegrator( _PenaltyMassIntegrator):
-    def make_index(self, space: _FS):
-        threshold = self.threshold
-
-        if isinstance(threshold, TensorLike):
-            index = threshold
-        else:
-            mesh = space.mesh
-            face2cell = mesh.face_to_cell()
-            index = face2cell[:, 0] != face2cell[:, 1]
-            if callable(threshold):
-                bc = mesh.entity_barycenter('face', index=index)
-                index = index[threshold(bc)]
-        return index

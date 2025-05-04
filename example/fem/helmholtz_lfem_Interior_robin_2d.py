@@ -10,7 +10,8 @@ from fealpy.backend import backend_manager as bm
 from fealpy.ml.helmholtz_pinn  import HelmholtzData2d
 from fealpy.mesh import TriangleMesh
 from fealpy.functionspace import LagrangeFESpace
-from fealpy.fem import ScalarDiffusionIntegrator, ScalarMassIntegrator, ScalarRobinBCIntegrator     
+from fealpy.fem import ScalarDiffusionIntegrator, ScalarMassIntegrator, ScalarRobinBCIntegrator 
+from fealpy.fem import ScalarFaceInteriorPenaltyIntegrator    
 from fealpy.fem import ScalarSourceIntegrator, ScalarRobinSourceIntegrator         
 from fealpy.fem import BilinearForm, LinearForm
 from fealpy.solver import cg
@@ -18,6 +19,7 @@ from fealpy.utils import timer
 
 # 记录程序开始时间
 start_time = time.time()
+
 
 ## 参数解析
 parser = argparse.ArgumentParser(description=
@@ -49,6 +51,11 @@ parser.add_argument('--device',
         default='cpu', type=str,
         help='默认cpu上运行')
 
+parser.add_argument('--gamma',
+        default=0.1 + 1j * 0.1, type=float,
+        help='默认内罚参数为100.0')
+
+
 args = parser.parse_args()
 # args.backend = 'pytorch'
 bm.set_backend(args.backend)
@@ -57,6 +64,7 @@ ns = args.ns
 maxit = args.maxit
 k = args.wavenum
 kappa = k * 1j
+gamma = args.gamma
 
 tmr = timer()
 next(tmr)
@@ -69,6 +77,7 @@ errorMatrix = bm.zeros((4, maxit), dtype=bm.float64)
 D = ScalarDiffusionIntegrator(coef=1, q=p+2)
 M = ScalarMassIntegrator(coef=-k**2, q=p+2)
 R = ScalarRobinBCIntegrator(coef=kappa, q=p+2)
+G = ScalarFaceInteriorPenaltyIntegrator(coef=gamma, q=p+2)
 
 f = ScalarSourceIntegrator(pde.source, q=p+2)
 Vr = ScalarRobinSourceIntegrator(pde.robin, q=p+2)
@@ -87,6 +96,7 @@ for i in range(maxit):
     b = BilinearForm(space)
     b.add_integrator([D, M])
     b.add_integrator(R)
+    b.add_integrator(G)
 
     l = LinearForm(space)
     l.add_integrator(f)
@@ -132,8 +142,9 @@ mesh.add_plot(axes[0, 0], cellcolor=bm.real(u), linewidths=0)
 mesh.add_plot(axes[0, 1], cellcolor=bm.imag(u), linewidths=0) 
 mesh.add_plot(axes[1, 0], cellcolor=bm.real(uh), linewidths=0)
 mesh.add_plot(axes[1, 1], cellcolor=bm.imag(uh), linewidths=0) 
+
 # 添加整个图的标题
-plt.suptitle("Finite Element Method ")
+plt.suptitle("Interior Penalty Finite Element Method ")
 
 # 调整子图间距防止标题重叠
 plt.tight_layout()
@@ -145,4 +156,4 @@ end_time = time.time()
 
 # 计算总运行时间
 total_time = end_time - start_time
-print(f"FEM total running time: {total_time} seconds")
+print(f"IPFEM total running time: {total_time} seconds")
