@@ -6,8 +6,7 @@ import time
 from fealpy import logger
 logger.setLevel('WARNING')
 from fealpy.backend import backend_manager as bm
-# from fealpy.pde.helmholtz_2d import HelmholtzData2d
-from fealpy.ml.helmholtz_pinn  import HelmholtzData2d
+from fealpy.pde.helmholtz_2d import HelmholtzData2d
 from fealpy.mesh import TriangleMesh
 from fealpy.functionspace import LagrangeFESpace
 from fealpy.fem import ScalarDiffusionIntegrator, ScalarMassIntegrator, ScalarRobinBCIntegrator 
@@ -17,8 +16,6 @@ from fealpy.fem import BilinearForm, LinearForm
 from fealpy.solver import cg
 from fealpy.utils import timer
 
-# 记录程序开始时间
-start_time = time.time()
 
 
 ## 参数解析
@@ -69,7 +66,7 @@ gamma = args.gamma
 tmr = timer()
 next(tmr)
 
-pde = HelmholtzData2d(k=k, backend=args.backend) 
+pde = HelmholtzData2d(k=k) 
 domain = pde.domain()
 
 errorMatrix = bm.zeros((4, maxit), dtype=bm.float64)
@@ -83,6 +80,9 @@ f = ScalarSourceIntegrator(pde.source, q=p+2)
 Vr = ScalarRobinSourceIntegrator(pde.robin, q=p+2)
 
 NDof = bm.zeros(maxit, dtype=bm.int64, device=args.device)
+
+# 记录循环开始时间
+start_time = time.time()
 
 for i in range(maxit):
 
@@ -116,6 +116,7 @@ for i in range(maxit):
     R.clear()
     f.clear()
     Vr.clear()
+    G.clear()
 
     errorMatrix[0, i] = mesh.error(pde.solution, uI)
     errorMatrix[1, i] = mesh.error(pde.gradient, uI.grad_value)
@@ -123,15 +124,22 @@ for i in range(maxit):
     errorMatrix[3, i] = mesh.error(pde.gradient, uh.grad_value, q=p+2)
     tmr.send(f'第{i}次误差计算及网格加密时间')
 
+next(tmr)
+
+# 记录循环结束时间
+end_time = time.time()
+total_time = end_time - start_time
+print(f"IPFEM loop total running time: {total_time} s")
+
 bc = bm.array([[1/3, 1/3, 1/3]], dtype=bm.float64)
 ps = mesh.bc_to_point(bc)
 u = pde.solution(ps)
 uI = uI(bc)
 uh = uh(bc)
 
-next(tmr)
-print(errorMatrix)
-print(errorMatrix[:, 0:-1]/errorMatrix[:, 1:])
+
+print('误差矩阵:', errorMatrix, sep='\n')
+print('误差阶:', errorMatrix[:, 0:-1]/errorMatrix[:, 1:], sep='\n')
 
 fig, axes = plt.subplots(2, 2)
 axes[0, 0].set_title('Real Part of True Solution')
@@ -143,17 +151,7 @@ mesh.add_plot(axes[0, 1], cellcolor=bm.imag(u), linewidths=0)
 mesh.add_plot(axes[1, 0], cellcolor=bm.real(uh), linewidths=0)
 mesh.add_plot(axes[1, 1], cellcolor=bm.imag(uh), linewidths=0) 
 
-# 添加整个图的标题
+
 plt.suptitle("Interior Penalty Finite Element Method ")
-
-# 调整子图间距防止标题重叠
-plt.tight_layout()
-
+plt.tight_layout() # 调整子图间距防止标题重叠
 plt.show()
-
-# 记录程序结束时间
-end_time = time.time()
-
-# 计算总运行时间
-total_time = end_time - start_time
-print(f"IPFEM total running time: {total_time} seconds")

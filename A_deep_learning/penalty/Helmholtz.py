@@ -15,6 +15,8 @@ from fealpy.fem import BilinearForm, LinearForm
 from fealpy.solver import cg
 from fealpy.utils import timer
 
+# 记录程序开始时间
+start_time0 = time.time()
 
 ## 参数解析
 parser = argparse.ArgumentParser(description=
@@ -117,6 +119,8 @@ next(tmr)
 
 # 记录循环结束时间
 end_time = time.time()
+
+# 计算循环总运行时间
 total_time = end_time - start_time
 print(f"FEM loop total running time: {total_time} s")
 
@@ -138,7 +142,17 @@ mesh.add_plot(axes[0, 0], cellcolor=bm.real(u), linewidths=0)
 mesh.add_plot(axes[0, 1], cellcolor=bm.imag(u), linewidths=0) 
 mesh.add_plot(axes[1, 0], cellcolor=bm.real(uh), linewidths=0)
 mesh.add_plot(axes[1, 1], cellcolor=bm.imag(uh), linewidths=0) 
-
+# 添加整个图的标题
 plt.suptitle("Finite Element Method ")
-plt.tight_layout() # 调整子图间距防止标题重叠
+
+# 调整子图间距防止标题重叠
+plt.tight_layout()
+
+
+# 记录循环结束时间
+end_time0 = time.time()
+# 计算总运行时间
+total_time0 = end_time0 - start_time0
+print(f"FEM total running time: {total_time0} s")
+
 plt.show()
