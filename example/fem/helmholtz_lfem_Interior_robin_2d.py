@@ -49,8 +49,8 @@ parser.add_argument('--device',
         help='默认cpu上运行')
 
 parser.add_argument('--gamma',
-        default=0.1 + 1j * 0.1, type=float,
-        help='默认内罚参数为100.0')
+        default= 10 + 1j * 10, type=float,
+        help='默认内罚参数为10+10i')
 
 
 args = parser.parse_args()
@@ -62,7 +62,7 @@ maxit = args.maxit
 k = args.wavenum
 kappa = k * 1j
 gamma = args.gamma
-
+print('gamma:', gamma)
 tmr = timer()
 next(tmr)
 
