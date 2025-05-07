@@ -3,8 +3,8 @@ import math
 from ..backend import backend_manager as bm
 from ..backend import TensorLike
 from ..sparse import csr_matrix, SparseTensor
-from ..mesh import UniformMesh
-
+from ..mesh import UniformMesh2d
+mesh = UniformMesh2d()
 
 class LaplaceOperator():
     """
