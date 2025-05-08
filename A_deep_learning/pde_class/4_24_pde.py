@@ -43,6 +43,7 @@ class SinPDEData1D:
     def source(self, p: TensorLike) -> TensorLike:
         val = self.solution(p) 
         return val
+    
     def dirichlet(self, p: TensorLike) -> TensorLike:
         return self.solution(p).reshape(-1)
     
