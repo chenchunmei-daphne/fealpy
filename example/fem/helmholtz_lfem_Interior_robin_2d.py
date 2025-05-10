@@ -15,7 +15,7 @@ from fealpy.fem import ScalarSourceIntegrator, ScalarRobinSourceIntegrator
 from fealpy.fem import BilinearForm, LinearForm
 from fealpy.solver import cg
 from fealpy.utils import timer
-
+import math
 
 
 ## 参数解析
@@ -37,7 +37,7 @@ parser.add_argument('--ns',
         help='初始网格 x 和 y 方向剖分段数, 默认 20 段.')
 
 parser.add_argument('--maxit',
-        default=4, type=int,
+        default=5, type=int,
         help='默认网格加密求解的次数, 默认加密求解 4 次')
 
 parser.add_argument('--backend',
@@ -49,7 +49,7 @@ parser.add_argument('--device',
         help='默认cpu上运行')
 
 parser.add_argument('--gamma',
-        default= 10 + 1j * 10, type=float,
+        default= -math.sqrt(3.0)/24.0, type=float,
         help='默认内罚参数为10+10i')
 
 
