@@ -5,23 +5,22 @@ from fealpy.backend import backend_manager as bm
 bm.set_backend('numpy')
 
 from fealpy.solver import spsolve
-from fealpy.fdm import EllipticFDMModel
+from fealpy.fdm import PoissonFDMModel
 from fealpy.utils import timer
 
 tmr = timer()
 next(tmr)
 
-
 ## 参数解析
 parser = argparse.ArgumentParser(description=
-        """ 在均匀网格上使用有限差分方法求解 elliptic 方程 """)
+        """ 在均匀网格上使用有限差分方法求解 poisson 方程 """)
 
 parser.add_argument('--example',
-        default='coscos', type=str,
-        help="求解的 elliptic 方程的算例, 默认是'coscos',其他可选算例还有: 'sinsin', " \
+        default='sinsin', type=str,
+        help="求解的 poisson 方程的算例, 默认是'sinsin',其他可选算例还有: 'sin', 'coscso', " \
         "还可以用下面的代码可查看可用的算例： \
         from fealpy.model import PDEDataManager \
-        PDEDataManager('elliptic').show_examples().")
+        PDEDataManager('poisson').show_examples().")
 
 parser.add_argument('--maxit',
         default=4, type=int,
@@ -41,7 +40,7 @@ ns = args.ns
 maxit = args.maxit
 solver = args.solver
 
-model = EllipticFDMModel(example=example, maxit=maxit, ns=ns, solver=solver)
+model = PoissonFDMModel(example=example, maxit=maxit, ns=ns, solver=solver)
 model.run()   # 加密求解过程
 tmr.send('Total time')
 next(tmr)
