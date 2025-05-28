@@ -93,8 +93,8 @@ class ConvectionOperator(OpteratorBase):
         elif isinstance(self.convection_coef, (list, tuple)):
             # 处理列表或元组情况
             b = bm.array(self.convection_coef, dtype=bm.float64)
-        elif isinstance(self.convection_coef, (bm.ndarray, bm.Tensor)):
-            D = self.convection_coef
+        elif isinstance(self.convection_coef, TensorLike):
+            b = self.convection_coef
         else:
             raise ValueError(f"Invalid data type: convection_coef must be an int, float, list, tuple, tensor, or callable(e.g. function). \
                              Now is {type(self.convection_coef)}.")
@@ -161,8 +161,8 @@ class ConvectionOperator(OpteratorBase):
         elif isinstance(self.convection_coef, (list, tuple)):
             # 处理列表或元组情况
             b = bm.array(self.convection_coef, dtype=bm.float64)
-        elif isinstance(self.convection_coef, (bm.ndarray, bm.Tensor)):
-            D = self.convection_coef
+        elif isinstance(self.convection_coef, TensorLike):
+            b = self.convection_coef
         else:
             raise ValueError(f"Invalid data type: convection_coef must be an int, float, list, tuple, tensor, or callable(e.g. function). \
                              Now is {type(self.convection_coef)}.")

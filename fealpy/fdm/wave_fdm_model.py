@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 
 from ..backend import backend_manager as bm
 from ..mesh import UniformMesh
-from ..fdm import LaplaceOperator
-from ..fdm import DirichletBC
+from ..fdm import LaplaceOperator, DirichletBC
 from ..sparse import spdiags
 from ..solver import spsolve
 from ..model import PDEDataManager

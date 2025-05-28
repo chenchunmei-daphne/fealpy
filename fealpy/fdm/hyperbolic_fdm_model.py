@@ -7,10 +7,9 @@ from ..sparse import spdiags
 from ..solver import spsolve
 
 from ..model import PDEDataManager
-from ..mesh import UniformMesh  
-from . import LaplaceOperator   
-from . import DirichletBC
-from .convection_operator import ConvectionOperator
+from ..mesh import UniformMesh     
+from . import DirichletBC, ConvectionOperator
+
 
 
 class HyperbolicFDMModel:
@@ -36,6 +35,9 @@ class HyperbolicFDMModel:
         scheme : {'forward','backward','cn'}, optional, default='backward'
             Time-stepping scheme: forward Euler, backward Euler,
             or Crank–Nicolson.
+        method : optional'upwind_const_1' or 'central_const_2',
+            the meaning is the assembly method for the convection term.
+
     
     Attributes
     ----------
@@ -49,6 +51,7 @@ class HyperbolicFDMModel:
             Solver function for linear systems.
         scheme : str
             Time-stepping scheme.
+        method : the meaning is the assembly method for the convection term.
         nt : int
             Number of time steps.
         mesh : UniformMesh object
@@ -62,7 +65,8 @@ class HyperbolicFDMModel:
     """
     
     def __init__(self, example: str = 'sinsin', maxit: int = 4, 
-                 ns: int = 20, solver=spsolve, nt: int = 400,  scheme: str='backward'):
+                 ns: int = 20, solver=spsolve, nt: int = 400, 
+                 scheme: str='backward', method: str ='upwind_const_1'):
         """
         Initialize the ParabolicFDMModel.
         
@@ -89,6 +93,7 @@ class HyperbolicFDMModel:
         self.scheme = scheme.lower()
         self.nt = nt
         self.maxit = maxit
+        self.method = method
         self.mesh = None
         self.t0, self.t1 = self.pde.duration()
         self.final_solutions = None
@@ -111,7 +116,17 @@ class HyperbolicFDMModel:
         mesh = self.mesh
         pde = self.pde
 
-        A = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef).assembly()
+        if hasattr(pde, 'convection_coef'):
+            if self.method == 'upwind_const_1':
+                A = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method).assembly()
+            elif self.method == 'central_const_2':
+                co = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method)
+                A = co.assembly_central_const()
+            else:
+                raise(f"There is no method {self.method}, \
+                      only methods 'upwind_const_1' and 'central_const_2'.")
         I = spdiags(bm.ones(A.shape[0], dtype=mesh.ftype), 0, A.shape[0], A.shape[1])
         self.A = A
         self.I = I

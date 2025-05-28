@@ -4,8 +4,8 @@ from ..mesh import UniformMesh
 from ..model import ComputationalModel
 from ..model import PDEDataManager
 from ..solver import spsolve
-from .laplace_operator import LaplaceOperator
-from .dirichlet_bc import DirichletBC
+from . import LaplaceOperator, DirichletBC
+
 
 
 class PoissonFDMModel(ComputationalModel):

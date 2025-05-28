@@ -1,7 +1,8 @@
 import math
-from typing import Optional, Callable, Union
-import inspect
 from ..backend import backend_manager as bm
+from typing import Optional, Callable, Union
+from ..backend import TensorLike
+import inspect
 from ..backend import TensorLike
 from ..sparse import csr_matrix, SparseTensor
 from ..mesh import UniformMesh
@@ -79,7 +80,7 @@ class DiffusionOperator(OpteratorBase):
                 D = f()
         elif isinstance(f, (int, float)):
             D = bm.eye(GD) * f
-        elif isinstance(f, (bm.ndarray, bm.Tensor)):
+        elif isinstance(f, TensorLike):
             D = f
         else:
             raise ValueError(f"Invalid data type: diffusion_coef must be an int, float, tensor, or callable(e.g. function). \

@@ -9,11 +9,9 @@ from ..solver import spsolve
 
 from ..model import PDEDataManager
 from ..mesh import UniformMesh  
-from . import LaplaceOperator   
-from . import DirichletBC
-from .diffusion_operator import DiffusionOperator
-from .convection_operator import ConvectionOperator
-from .reaction_operator import ReactionOperator
+from . import LaplaceOperator, DirichletBC
+from . import DiffusionOperator, ConvectionOperator, ReactionOperator
+
 
 
 class ParabolicFDMModel:
@@ -39,6 +37,8 @@ class ParabolicFDMModel:
             Linear system solver function
         nt : int, optional, default=400
             Number of time steps
+        method : optional'upwind_const_1' or 'central_const_2',
+            the meaning is the assembly method for the convection term.
         scheme : str, optional, default='backward'
             Time stepping scheme:
             - 'forward': Forward Euler (explicit)
@@ -51,6 +51,7 @@ class ParabolicFDMModel:
             Manages PDE problem data (domain, ICs, BCs, exact solution)
         mesh : UniformMesh
             Current computational mesh
+        method : the meaning is the assembly method for the convection term.
         t0, t1 : float
             Start and end times of simulation
         final_solutions : list
@@ -66,29 +67,15 @@ class ParabolicFDMModel:
     """
 
     def __init__(self, example: str = 'sinsin', maxit: int = 4, 
-                 ns: int = 20, solver=spsolve, nt: int = 400, scheme: str='backward'):
-        """Initialize parabolic PDE solver
-        
-        Parameters
-        ----------
-            example : str, optional, default='sinsin'
-                Name of example problem from PDEDataManager
-            maxit : int, optional, default=4
-                Maximum number of mesh refinements
-            ns : int, optional, default=20
-                Initial mesh segments per dimension
-            solver : callable, optional, default=spsolve
-                Linear system solver function
-            nt : int, optional, default=400
-                Number of time steps
-            scheme : str, optional, default='backward'
-                Time stepping scheme ('forward', 'backward', or 'cn')
-        """
+                 ns: int = 20, solver=spsolve, nt: int = 400, 
+                 scheme: str='backward', method: str ='upwind_const_1'):
+    
         self.pde = PDEDataManager('parabolic').get_example(example) 
         self.maxit = maxit
         self.ns = ns
         self.solver = spsolve
         self.scheme = scheme.lower()
+        self.method = method
         self.nt = nt
         self.maxit = maxit
         self.mesh = None
@@ -126,8 +113,18 @@ class ParabolicFDMModel:
         else:
             A = LaplaceOperator(mesh).assembly()
         
-        if hasattr(pde, 'convection_coef'): 
-            A += ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef).assembly()
+        if hasattr(pde, 'convection_coef'):
+            if self.method == 'upwind_const_1':
+                A += ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method).assembly()
+            elif self.method == 'central_const_2':
+                co = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method)
+                A += co.assembly_central_const()
+            else:
+                raise(f"There is no method {self.method}, \
+                      only methods 'upwind_const_1' and 'central_const_2'.")
+        
         if hasattr(pde, 'reaction_coef'):  
             A += ReactionOperator(mesh=mesh, reaction_coef=pde.reaction_coef).assembly()
 

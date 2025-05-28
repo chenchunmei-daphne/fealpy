@@ -384,66 +384,7 @@ class UniformMesh1d(StructuredMesh, TensorMesh, Plotable):
             etype = estr2dim(self, etype)
         qf = GaussLegendreQuadrature(q, dtype=self.ftype, device=self.device)
         return qf        
-    
-    def function(self, etype='node', dtype=None, ex=0, flat=False):
-        """Returns an array defined on nodes or cells with all elements set to 0"""
-        nx = self.nx
-        dtype = self.ftype if dtype is None else dtype
-        if etype in {'node', 'face', 0}:
-            uh = bm.zeros(nx + 1, dtype=dtype)
-        elif etype in {'cell', 1}:
-            uh = bm.zeros(nx, dtype=dtype)
-        else:
-            raise ValueError('the entity `{etype}` is not correct!')
-        if flat is False:
-            return uh
-        else:
-            return uh.flatten()
-        
-    def update_dirichlet_bc(self, 
-        gD: Callable[[TensorLike], Any], 
-        uh: TensorLike, 
-        threshold: Optional[Union[int, Callable[[TensorLike], float]]] = None) -> None:
-        """更新网格函数 uh 的 Dirichlet 边界值"""
-        node = self.node
-        if threshold is None:
-            isBdNode = self.boundary_node_flag()
-            uh[isBdNode]  = gD(node[isBdNode])
-        elif isinstance(threshold, int):
-            uh[threshold] = gD(node[threshold])
-        elif callable(threshold):
-            isBdNode = threshold(node)
-            uh[isBdNode]  = gD(node[isBdNode])
 
-    def error(self, 
-            u: Callable, 
-            uh: TensorLike, 
-            errortype: str = 'all'
-        ) -> Union[float, Tuple[float, float, float]]:
-        """计算真实解和数值解之间的误差"""
-        h = self.h
-        node = self.node
-        uI = u(node).flatten()
-        e = uI - uh
-
-        if errortype == 'all':
-            emax = bm.max(bm.abs(e))
-            e0 = bm.sqrt(h * bm.sum(e ** 2))
-
-            de = e[1:] - e[0:-1]
-            e1 = bm.sqrt(bm.sum(de ** 2) / h + e0 ** 2)
-            return emax, e0, e1
-        elif errortype == 'max':
-            emax = bm.max(bm.abs(e))
-            return emax
-        elif errortype == 'L2':
-            e0 = bm.sqrt(h * bm.sum(e ** 2))
-            return e0
-        elif errortype == 'H1':
-            e0 = bm.sqrt(h * bm.sum(e ** 2))
-            de = e[1:] - e[0:-1]
-            e1 = bm.sqrt(bm.sum(de ** 2) / h + e0 ** 2)
-            return e1
 
     def show_function(self, plot, uh, box=None):
         """画出定义在网格上的离散函数"""

@@ -34,14 +34,19 @@ parser.add_argument('--ns',
 parser.add_argument('--solver',
         default=spsolve,
         help='求解器, 默认是 spsolve')
+parser.add_argument('--method',
+        default= 'upwind_const_1',
+        help="对流项的组装方法, 默认是 'upwind_const_1', 还有 'central_const_2'.")
 
 args = parser.parse_args()
 example = args.example
 ns = args.ns
 maxit = args.maxit
 solver = args.solver
+method = args.method
 
-model = EllipticFDMModel(example=example, maxit=maxit, ns=ns, solver=solver)
+model = EllipticFDMModel(example=example, maxit=maxit, ns=ns, 
+                         solver=solver, method=method)
 model.run()   # 加密求解过程
 tmr.send('Total time')
 next(tmr)

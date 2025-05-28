@@ -4,10 +4,10 @@ from ..mesh import UniformMesh
 from ..model import ComputationalModel
 from ..model import PDEDataManager
 from ..solver import spsolve
-from .diffusion_operator import DiffusionOperator
-from .convection_operator import ConvectionOperator
-from .reaction_operator import ReactionOperator
-from .dirichlet_bc import DirichletBC
+from . import  DirichletBC
+from . import DiffusionOperator, ConvectionOperator, ReactionOperator
+
+
 
 class EllipticFDMModel(ComputationalModel):
     """Finite Difference Method solver for Elliptic equation.
@@ -26,6 +26,8 @@ class EllipticFDMModel(ComputationalModel):
         Initial number of segments per dimension.
     solver : callable, optional, default=spsolve
         Linear system solver function (e.g., scipy.sparse.linalg.spsolve).
+    method : optional'upwind_const_1' or 'central_const_2',
+            the meaning is the assembly method for the convection term.
 
     Attributes
     ----------
@@ -37,6 +39,7 @@ class EllipticFDMModel(ComputationalModel):
         Initial segments per dimension.
     solver : callable
         Linear system solver function.
+    method : the meaning is the assembly method for the convection term.
     mesh : UniformMesh
         Current computational mesh.
     uh : ndarray
@@ -45,12 +48,14 @@ class EllipticFDMModel(ComputationalModel):
         Error matrix storing L∞, L2 and H1 errors for each refinement.
     """
 
-    def __init__(self, example: str = 'coscos', maxit: int = 4, ns: int = 20, solver=spsolve):
-        """Initialize Poisson FDM solver with given parameters."""
+    def __init__(self, example: str = 'coscos', maxit: int = 4, ns: int = 20, 
+                 solver=spsolve, method: str ='upwind_const_1'):
+   
         self.pde = PDEDataManager('elliptic').get_example(example)
         self.maxit = maxit
         self.ns = ns
         self.solver = solver
+        self.method = method
 
     def run(self):
         """Execute the solver with mesh refinement.
@@ -89,7 +94,7 @@ class EllipticFDMModel(ComputationalModel):
         """
         domain = self.pde.domain()
         extent = [0, n] * self.pde.geo_dimension()
-        self.mesh = UniformMesh(domain, extent)
+        self.mesh = UniformMesh(domain=domain, extent=extent)
 
     def _linear_system(self):
         """Assemble the linear system Ax = f.
@@ -107,7 +112,15 @@ class EllipticFDMModel(ComputationalModel):
         A = DiffusionOperator(mesh=mesh, diffusion_coef=pde.diffusion_coef).assembly()
 
         if hasattr(pde, 'convection_coef'):
-            C = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef).assembly()
+            if self.method == 'upwind_const_1':
+                C = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method).assembly()
+            elif self.method == 'central_const_2':
+                co = ConvectionOperator(mesh=mesh, convection_coef=pde.convection_coef, 
+                                    method=self.method)
+                C = co.assembly_central_const()
+            else:
+                raise(f"There is no method {self.method}, only methods 'upwind_const_1' and 'central_const_2'.")
 
         if hasattr(pde, 'reaction_coef'):
             R = ReactionOperator(mesh=mesh, reaction_coef=pde.reaction_coef).assembly()
