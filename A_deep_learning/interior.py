@@ -73,7 +73,7 @@ def penalty_matrix():
 
         face2cell = mesh.face_to_cell()
         isInFace = face2cell[:, 0] != face2cell[:, 1]
-
+        #  
 
 
         h = mesh.entity_measure('face', index=isInFace)
