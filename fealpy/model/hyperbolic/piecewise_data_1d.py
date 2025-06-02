@@ -56,7 +56,7 @@ class PiecewiseData1D:
     @cartesian
     def gradient(self, p: TensorLike, t: float) -> TensorLike:
         """Compute spatial gradient of solution at time t."""
-        x = p[..., 0]
+        x = p
         grad = bm.zeros_like(x)
         flag1 = x <= t
         flag2 = x > t + 1

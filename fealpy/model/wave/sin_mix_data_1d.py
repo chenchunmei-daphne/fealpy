@@ -52,7 +52,7 @@ class SinMixData1D:
     @cartesian
     def solution(self, p: TensorLike, t: float) -> TensorLike:
         """Compute exact solution at time t. """
-        x = p[..., 0]
+        x = p
         term1 = bm.cos(4 * bm.pi * t) * bm.sin(4 * bm.pi * x)
         term2 = (1 / (8 * bm.pi)) * bm.sin(8 * bm.pi * t) * bm.sin(8 * bm.pi * x)
         return term1 + term2
