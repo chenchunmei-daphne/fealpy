@@ -1,6 +1,6 @@
 from typing import Optional
 from ..model import ComputationalModel, mregister
-from ..model.elliptic import EllipticPDEDataT, get_example
+from ..model.elliptic import EllipticPDEDataT
 from ..mesh import TriangleMesh
 
 from ..functionspace import RaviartThomasFESpace2d
