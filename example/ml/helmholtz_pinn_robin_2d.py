@@ -54,8 +54,8 @@ residual = Residual('helmholtz_2d')
 
 # 共享采样器
 sampler_pde = ISampler(ranges=domain, requires_grad=True)
-bc1, bc2 = domain[0::2], domain[1::2]
-sampler_bc = BoxBoundarySampler(p1=bc1, p2=bc2, requires_grad=True)
+p1, p2 = domain[0::2], domain[1::2]
+sampler_bc = BoxBoundarySampler(p1, p2, requires_grad=True)
 
 # 训练过程
 start_time = time.time()

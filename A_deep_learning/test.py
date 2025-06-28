@@ -1,96 +1,25 @@
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import torch
+import torch.nn as nn
+from fealpy.ml.modules import Solution
 
-from fealpy.backend import backend_manager as bm
-bm.set_backend('numpy')
+net = nn.Sequential(
+    nn.Linear(2, 30, dtype=torch.float64), nn.Tanh(),
+    nn.Linear(30, 15, dtype=torch.float64))
+net = Solution(net)
 
-from fealpy.model import PDEDataManager
-from fealpy.mesh import TriangleMesh, IntervalMesh
-from fealpy.functionspace import LagrangeFESpace
-from fealpy.fem import ScalarDiffusionIntegrator
-from fealpy.fem import ScalarSourceIntegrator
-from fealpy.fem import BilinearForm, LinearForm
-from fealpy.fem import DirichletBC
-from fealpy.solver import spsolve
+# 测试网络
+# X = torch.normal(0, 1, (100, 2), dtype=torch.float64)
+# output = net(X)
 
+X = torch.rand(10, 20, 2, dtype=torch.float64)  # 3D 张量
+output = net.last_dim(X)    # 会调用 TensorMapping 的维度处理逻辑
+print(output.shape)  # 输出形状应为 (10, 20, 15)
+print(net.get_device())  # 调用 TensorMapping 的设备查询方法
 
-pde = PDEDataManager('poisson').get_example('sin')
+import numpy as np
+X_np = np.random.rand(100, 2)
+output = net.from_numpy(X_np)  # 调用 TensorMapping 的NumPy转换方法
 
-domain = pde.domain()
-mesh = IntervalMesh.from_interval_domain(interval=domain, nx=10)
-
-p = 3
-q = 3
-space = LagrangeFESpace(mesh, p)
-print("gdof:", space.number_of_global_dofs())
-
-bform = BilinearForm(space)
-bform.add_integrator(ScalarDiffusionIntegrator(q=q))
-A = bform.assembly()
-
-lform = LinearForm(space)
-lform.add_integrator(ScalarSourceIntegrator(pde.source, q=q))
-F = lform.assembly()
-
-bc = DirichletBC(space, pde.dirichlet)
-A, F = bc.apply(A, F)
-
-uh = space.function()
-uh[:] = spsolve(A, F, solver='scipy')
-
-e = mesh.error(pde.solution, uh)
-print('solution error =', e)
-
-qf = mesh.quadrature_formula(q, etype='cell')
-bcs, ws = qf.get_quadrature_points_and_weights()
-print("NQ:", ws.shape)
-ps = mesh.bc_to_point(bcs)
-# print(bcs.shape, ps.shape)
-g0 = pde.gradient(p=ps)
-g1 = uh.grad_value(bcs)
-print("g0.shape:", g0.shape, "g1.shape:", g1.shape)
-
-e1 = mesh.error(pde.gradient, uh.grad_value, q=q)
-print('gradient error =', e1)
-
-# fig = plt.figure()
-# axes = fig.add_subplot()
-# mesh.add_plot(axes)
-# mesh.find_node(axes, node=ipoints, 
-#                showindex=True, color='r', fontsize='30')
-# mesh.find_cell(axes, showindex=True, fontsize='35')
-# plt.show()
-
-
-
-exit()
-
-NN = mesh.number_of_nodes()
-NC = mesh.number_of_cells()
-NE = mesh.number_of_edges()
-ipoints = mesh.interpolation_points(p)
-
-print('number of nodes =', NN)
-print('number of cells =', NC)
-print('number of edges =', NE)  
-
-cell2dof = space.cell_to_dof()
-print(cell2dof)
-
-mesh.uniform_refine()
-bform = BilinearForm(space)
-bform.add_integrator(ScalarDiffusionIntegrator(q=3))
-A = bform.assembly()
-
-lform = LinearForm(space)
-lform.add_integrator(ScalarSourceIntegrator(pde.source, q=3))
-F = lform.assembly()
-
-bc = DirichletBC(space, pde.dirichlet)
-A, F = bc.apply(A, F)
-
-uh = space.function()
-uh[:] = spsolve(A, F, solver='scipy')
-
-e = mesh.error(pde.solution, uh)
-print('error =', e)
+# net = net.to('cuda')     # 触发PyTorch的设备转移
+from d2l import torch as d2l
+d2l.tran
