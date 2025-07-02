@@ -1,7 +1,6 @@
 import torch 
 import torch.nn as nn
-from torch.optim import Adam, SGD
-from torch.optim.lr_scheduler import StepLR
+from torch.optim import Adam
 import matplotlib.pyplot as plt
 
 torch.manual_seed(123)
@@ -20,19 +19,17 @@ class MLP(nn.Module):
         self.relu = nn.ReLU()
         
     def forward(self, X):
-        X = self.relu(self.fc1(X))
-        X = self.fc2(X)
-        return X
+        h_relu = self.relu(self.fc1(X))
+        y_pred = self.fc2(h_relu)
+        return y_pred
 
 net = MLP()
-lr = 0.1
-# optimizer = Adam(net.parameters(), lr=lr)
-optimizer = SGD(net.parameters(), lr=lr)
-scheduler = StepLR(optimizer=optimizer, step_size=50, gamma=0.9)
-
+mse = nn.MSELoss(reduction="mean")   # 损失函数
 epochs = 100
+lr = 0.01   # 学习率
+optimizer = Adam(net.parameters(), lr=lr)  # 优化器
 l = []
-mse = nn.MSELoss(reduction="mean")
+
 for i in range(epochs):
     optimizer.zero_grad()
 
@@ -40,18 +37,16 @@ for i in range(epochs):
     loss = mse(y_pred, y)
     loss.backward()   # 反向转播
     optimizer.step()  # 调整参数
-    # scheduler.step()  # 调整学习率
 
     l.append(loss.detach())
 
-X_test = torch.tensor([[0.5,0.5], [1, 2]], dtype=torch.float64)
+# 测试
+X_test = torch.tensor([[0.5, 0.5], [1.0, 2.0]], dtype=torch.float64)
+y_pred = net(X_test)
+print("Prediction: \n", y_pred)
+print("Truth:\n", X_test @ W0 + b0)
 
-with torch.no_grad():
-    y_hat = net(X_test)
-    print("Prediction: \n", y_hat)
-    print("Truth: \n", X_test @ W0 + b0)
-print("last epochs loss: ", l[-1])
-plt.plot(l)
+plt.plot(l) # 画损失图像
 plt.show()
 
 

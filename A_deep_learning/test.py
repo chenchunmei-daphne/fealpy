@@ -1,25 +1,19 @@
 import torch
 import torch.nn as nn
-from fealpy.ml.modules import Solution
-
-net = nn.Sequential(
-    nn.Linear(2, 30, dtype=torch.float64), nn.Tanh(),
-    nn.Linear(30, 15, dtype=torch.float64))
-net = Solution(net)
-
-# 测试网络
-# X = torch.normal(0, 1, (100, 2), dtype=torch.float64)
-# output = net(X)
-
-X = torch.rand(10, 20, 2, dtype=torch.float64)  # 3D 张量
-output = net.last_dim(X)    # 会调用 TensorMapping 的维度处理逻辑
-print(output.shape)  # 输出形状应为 (10, 20, 15)
-print(net.get_device())  # 调用 TensorMapping 的设备查询方法
-
+import torch.optim as optim
 import numpy as np
-X_np = np.random.rand(100, 2)
-output = net.from_numpy(X_np)  # 调用 TensorMapping 的NumPy转换方法
+import matplotlib.pyplot as plt
+from fealpy.backend import backend_manager as bm
+from fealpy.ml.data_model.step_data_2d import StepData2D
 
-# net = net.to('cuda')     # 触发PyTorch的设备转移
-from d2l import torch as d2l
-d2l.tran
+pde = StepData2D()
+domain = pde.domain()   
+print("Domain:", domain)
+
+p = bm.tensor([[-1, 0], [-1.5, 1], [-4, -4], [3, -4], [4, 3], [4, 4]], dtype=bm.float64)
+s = pde.source(p)
+print("Source term:", s.shape, s)
+d = pde.dirichlet(p[2:, :])
+print("Dirichlet boundary condition:", d.shape, d)
+is_boundary = pde.is_dirichlet_boundary(p)
+print("Is Dirichlet boundary:", is_boundary.shape, is_boundary)
