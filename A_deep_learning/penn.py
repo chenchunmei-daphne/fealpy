@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 import matplotlib.pyplot as plt
 from fealpy.ml.data_model.exp_exp_data_2d import ExpExpData2D
 from fealpy.mesh import UniformMesh
@@ -20,18 +19,18 @@ g_true = pde.source(X).reshape(-1, 1)   # (M*N, 1)
 
 # 定义 PENN 架构
 class PENN(nn.Module):
-    def __init__(self, hidden_size=30, num_layers=2, uf=None, bf=None):
+    def __init__(self, input_size=30, hidden_size=30, num_layers=2, uf=None, bf=None):
         super(PENN, self).__init__()
-        self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(2, hidden_size))  # 输入层 (x,y) -> hidden
-        for _ in range(num_layers - 1):
-            self.layers.append(nn.Linear(hidden_size, hidden_size))
-        self.last_layer = nn.Linear(hidden_size, 1)    # 输出层 -> 系数
-        
+
+        self.hidden_1 = nn.Linear(in_features=input_size, out_features=hidden_size, bias=False)
+        self.hidden_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size, bias=False)
+        self.last_layer = nn.Linear(in_features=hidden_size, out_features=1, bias=False)    # 输出层 -> 系数
+
         self.uf = uf     # 形状函数（确保边界为 0）
         self.bf = bf     # 边界缩放函数(确保满足边界条件)
 
     def forward(self, X):
+        
         for layer in self.layers:
             h = torch.nn.functional.logsigmoid(layer(X))  # logsig 激活函数
         coefficients = self.last_layer(h)   # 线性激活
