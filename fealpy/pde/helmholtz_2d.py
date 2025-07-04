@@ -1,6 +1,5 @@
 
 from ..backend import backend_manager as bm
-bm.set_backend('pytorch')
 
 from ..typing import TensorLike
 from ..decorator import cartesian
@@ -72,12 +71,12 @@ class HelmholtzData2d():
         Returns:
             Tensor: The exact solution at given points.
         """
-        if bm.backend_name == 'pytorch':
-            x = p[..., 0:1]
-            y = p[..., 1:2]
-        elif bm.backend_name == 'numpy':
-            x = p[..., 0]
-            y = p[..., 1]
+        # if bm.backend_name == 'pytorch':
+        #     x = p[..., 0:1]
+        #     y = p[..., 1:2]
+        # elif bm.backend_name == 'numpy':
+        x = p[..., 0]
+        y = p[..., 1]
         r = bm.sqrt(x ** 2 + y ** 2)
         val = bm.zeros(x.shape, dtype=bm.complex128)
         val[:] = (bm.cos(self.k * r) - self.c * bessel_function(v=0, x=self.k * r)) / self.k

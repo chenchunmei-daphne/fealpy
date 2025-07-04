@@ -178,7 +178,7 @@ class TensorMapping(Module):
             val = self.from_numpy(ps, device=device, last_dim=True).cpu().detach().numpy()
             if squeeze:
                 val = val.squeeze(-1)
-            diff = np.abs(val - other(ps))**power
+            diff = np.abs(val - other(ps)[..., None])**power
 
         elif coordtype in {'barycentric', 'b'}:
 
