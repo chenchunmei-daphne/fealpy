@@ -61,11 +61,13 @@ class StepData2D:
     def boundary_scaling_function(self, p: TensorLike) -> TensorLike:
         """A boundary scaling is done by addition of the function B(x, y) 
         which satisfies the boundary and still satisfies the boundary along the edges."""
-        x = p[..., 0:1]
+        x = p[..., 0]
 
         return (x + 4.0) / 8.0
     
     @cartesian
     def gaussian_shape_function(self, p: TensorLike) -> TensorLike:
         """gaussian function with zero boundary through shape function U (x, y)."""
+        x, y = p[..., 0], p[..., 1]
+        return bm.exp(-0.5*((x+1)**2 + y**2))
 
