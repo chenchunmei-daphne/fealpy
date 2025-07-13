@@ -18,7 +18,7 @@ bm.set_backend('pytorch')
 num_of_point_pde = 200  
 num_of_point_bc = 100   
 lr = 0.01
-iteration = 600
+iteration = 600 
 NN = 32  
 num_networks = 2  # 定义网络数量
 
