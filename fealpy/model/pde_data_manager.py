@@ -42,9 +42,10 @@ class PDEDataManager:
         "elliptic": "fealpy.model.elliptic",
         "parabolic": "fealpy.model.parabolic",
         "wave": "fealpy.model.wave",
-        "hyperbolic":"fealpy.model.hyperbolic",
-        "nonlinear":"fealpy.model.nonlinear",
-        "linear_elasticity": "fealpy.model.linear_elasticity"
+        "hyperbolic": "fealpy.model.hyperbolic",
+        "nonlinear": "fealpy.model.nonlinear",
+        "linear_elasticity": "fealpy.model.linear_elasticity",
+        "helmholtz": "fealpy.model.helmholtz"
     }
 
     def __init__(self, pde_type: str = None):
@@ -53,7 +54,7 @@ class PDEDataManager:
 
         Parameters
             pde_type : str, optional
-                The PDE category to load (e.g., 'poisson', 'wave', 'parabolic', 'elliptic'). If not set,
+                The PDE category to load (e.g., 'poisson', 'wave', 'parabolic', 'elliptic', 'hyperbolic', 'helmholtz'). If not set,
                 only show_types() is available.
         """
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -110,7 +111,7 @@ class PDEDataManager:
             print(f" - {key}: ({file_name}, {class_name})")
         print(f"\nExample usage:\n   pde = PDEDataManager('{self.pde_type}').get_example('example name')")
 
-    def get_example(self, key: str = None):
+    def get_example(self, key: int = None, **options):
         """
         Instantiate and return a PDE model object based on example key.
 
@@ -142,4 +143,7 @@ class PDEDataManager:
         file_name, class_name = self.data_table[key]
         submodule = importlib.import_module(f"{self.module_path}.{file_name}")
         cls = getattr(submodule, class_name)
-        return cls()
+        if options == {}:
+            return cls()
+        else:
+            return cls(options)
