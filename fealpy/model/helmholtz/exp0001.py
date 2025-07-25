@@ -1,7 +1,7 @@
 from typing import Sequence
 from ...backend import backend_manager as bm
 from ...backend import TensorLike
-from ..box_domain_mesher import BoxDomainMesher2d
+from ...mesher import BoxMesher2d
 from ...decorator import cartesian
 
 def bessel_function(v: int, x: TensorLike) -> TensorLike:
@@ -23,11 +23,11 @@ def bessel_function(v: int, x: TensorLike) -> TensorLike:
             raise NotImplementedError("Just supports Bessel functions of order 0 and 1.")
 
 
-class EXP0001(BoxDomainMesher2d):
+class Exp0001(BoxMesher2d):
     """
     2D Helmholtz problem with complex Robin boundary conditions:
     
-        -Δu - k^2 u = f   in Ω = [0, 1]^2
+        -Δu - k^2 u = f   in Ω = [-0.5, 0.5]^2
          iku + ∂u/∂n = g  on ∂Ω
 
     Exact solution:
@@ -40,15 +40,14 @@ class EXP0001(BoxDomainMesher2d):
     Robin boundary term:
         g(x, y) = ∂u/∂n + i·k·u
 
-    Source:
+    Reference:
         https://cz5waila03cyo0tux1owpyofgoryroob.aminer.cn/A5/1A/1D/A51A1DBD4CE1D183344F2A280C430074.pdf
     """
     
-    def __init__(self, option=None):
+    def __init__(self, options: dict = {}):
         self.box = [-0.5, 0.5, -0.5, 0.5]
         super().__init__(box=self.box)
-        k = option.get('k', 1.0)
-        self.k = bm.tensor(k, dtype=bm.float64)
+        self.k = bm.tensor(options.get('k', 1.0))
         c1 = bm.cos(self.k) + bm.sin(self.k) * 1j
         c2 = bessel_function(0, self.k) + 1j * bessel_function(1, self.k)
         self.c = c1 / c2
@@ -123,4 +122,3 @@ class EXP0001(BoxDomainMesher2d):
             (bm.abs(y + 0.5) < atol) |
             (bm.abs(y - 0.5) < atol)
         )
-
