@@ -1,10 +1,10 @@
 from typing import Sequence
 from ...backend import backend_manager as bm
 from ...backend import TensorLike
-from ..box_domain_mesher import BoxDomainMesher2d
+from ...mesher import BoxMesher2d
 from ...decorator import cartesian
 
-class EXP0003(BoxDomainMesher2d):
+class Exp0003(BoxMesher2d):
     """
     2D Helmholtz problem with complex Robin boundary condition:
 
@@ -17,17 +17,17 @@ class EXP0003(BoxDomainMesher2d):
         k : wave number (scalar)
         theta : incident angle (in radians)
 
-    Source:
+    Reference:
         https://users.math.msu.edu/users/weig/PAPER/p103.pdf
     """
 
-    def __init__(self, option=None):
+    def __init__(self, option: dict = {}):
         self.box = [0.0, 1.0, 0.0, 1.0]
         super().__init__(box=self.box)
         self.k  = bm.tensor(option.get('k', 1.0))
         self.theta = bm.tensor(option.get('theta', bm.pi/4))
         self.k1 = self.k * bm.cos(self.theta)
-        self.k2 = self.k * bm.sin(self.theta)            
+        self.k2 = self.k * bm.sin(self.theta)       
 
     def geo_dimension(self) -> int:
         return 2
@@ -56,9 +56,7 @@ class EXP0003(BoxDomainMesher2d):
 
     @cartesian
     def robin(self, p: TensorLike, n: TensorLike) -> TensorLike:
-        """
-        Robin boundary data: g = ∂u/∂n + i·k·u
-        """
+        """Robin boundary value: ∂u/∂n + iku = g(x)"""
         kappa = 1j * self.k
         grad = self.gradient(p)
         if len(grad.shape) == self.geo_dimension():

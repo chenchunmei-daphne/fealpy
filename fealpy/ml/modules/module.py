@@ -253,7 +253,25 @@ class TensorMapping(Module):
     
             if squeeze:
                 val = val.squeeze(-1)
-            diff = np.abs(val - other(ps))**power
+            val_ture = other(ps)
+            val = val.detach() if val.requires_grad else val
+
+            # 统一形状
+            ndim = len(val_ture.shape)
+            if ndim == 2:  # 如果 val_ture 是 (N, M)
+                val_ture = val_ture.unsqueeze(-1)  # -> (N, M, 1)
+            elif ndim == 4:  # 如果 val_ture 是 (N, M, 1, 1)
+                val_ture = val_ture.squeeze()  # -> (N, M, 1)
+    
+            # 检查最终形状是否匹配
+            assert val.shape == val_ture.shape, f"Shape mismatch: val {val.shape}, val_ture {val_ture.shape}"
+            if compare == "real":
+                val = bm.real(val)
+                val_ture = bm.real(val_ture)
+            elif compare == 'imag':
+                val = bm.imag(val)
+                val_ture = bm.imag(val_ture)
+            diff = bm.abs(val - val_ture)**power
 
         elif coordtype in {'barycentric', 'b'}:
 
