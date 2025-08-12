@@ -30,7 +30,7 @@ class Exp0002(BoxMesher2d):
 
     The diffusion coefficient A, reaction coefficient c are defined as:
         A = [[1, 0], [0, 1]]
-        c = -0.2
+        c = 0.2
 
     Reference:
         https://doi.org/10.1016/j.neucom.2024.128936
@@ -57,26 +57,19 @@ class Exp0002(BoxMesher2d):
         """Gradient is unknown, return NotImplementedError."""
         raise NotImplementedError("The exact gradient is unknown.")
 
-    @cartesian
-    def diffusion_coef(self, p: TensorLike) -> TensorLike:
+    def diffusion_coef(self) -> TensorLike:
         """Diffusion coefficient (identity matrix)"""
-        val = -bm.array([[1.0, 0.0], [0.0, 1.0]])
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
-    
-    @cartesian
-    def diffusion_coef_inv(self, p: TensorLike) -> TensorLike:
+        val = bm.array([[1.0, 0.0], [0.0, 1.0]], dtype=bm.float64)
+        return val
+  
+    def diffusion_coef_inv(self) -> TensorLike:
         """Inverse diffusion coefficient (identity matrix)"""
-        val = -bm.array([[1.0, 0.0], [0.0, 1.0]])
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
+        val = bm.array([[1.0, 0.0], [0.0, 1.0]], dtype=bm.float64)
+        return val
 
-    @cartesian
-    def reaction_coef(self, p: TensorLike) -> TensorLike:
+    def reaction_coef(self) -> TensorLike:
         """Reaction coefficient (1/5)"""
-        val = -bm.array([0.2])  # 1/5 = 0.2
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
+        return 0.2
 
     @cartesian
     def source(self, p: TensorLike) -> TensorLike:

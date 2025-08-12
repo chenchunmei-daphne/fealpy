@@ -30,26 +30,20 @@ class Exp0001(BoxMesher2d):
     def domain(self):
         return self.box
 
-    @cartesian
-    def diffusion_coef(self, p: TensorLike) -> TensorLike:
+    def diffusion_coef(self) -> TensorLike:
         """Diffusion coefficient"""
-        val = bm.array([[10.0, 0.0], [0.0, 10.0]])
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
+        val = bm.array([[10.0, 0.0], [0.0, 10.0]], dtype=bm.float64)
+        return val
     
-    @cartesian
-    def diffusion_coef_inv(self, p: TensorLike) -> TensorLike:
+    def diffusion_coef_inv(self) -> TensorLike:
         """Inverse diffusion coefficient"""
-        val = bm.array([[0.1, 0], [0, 0.1]])
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
+        val = bm.array([[0.1, 0], [0, 0.1]], dtype=bm.float64)
+        return val
 
-    @cartesian
-    def reaction_coef(self, p: TensorLike) -> TensorLike:
+    def reaction_coef(self) -> TensorLike:
         """Reaction coefficient"""
-        val = bm.array([2.0])
-        shape = p.shape[:-1] + val.shape
-        return bm.broadcast_to(val, shape)
+        val = bm.array([2.0], dtype=bm.float64)
+        return val
 
     @cartesian
     def solution(self, p: TensorLike) -> TensorLike:
