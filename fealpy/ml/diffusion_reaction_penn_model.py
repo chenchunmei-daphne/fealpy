@@ -8,17 +8,16 @@ from fealpy.backend import  bm
 from fealpy.utils import timer
 from fealpy.typing import TensorLike
 from fealpy.model import ComputationalModel, PDEModelManager
-from fealpy.model.poisson import PoissonPDEDataT
+from fealpy.model.diffusion_reaction import DiffusionReactionPDEDataT
 
 from fealpy.ml import gradient, optimizers, activations
 from fealpy.ml.modules import Solution
 
-
-class PoissonPENNModel(ComputationalModel):
-    """Physics embedded neural network (PENN) model for solving Poisson's equation with Dirichlet boundary conditions.
+class DiffusionReactionPENNModel(ComputationalModel):
+    """Physics embedded neural network (PENN) model for solving diffusion-reaction equation with Dirichlet boundary conditions.
     
-    This class implements a PENN approach to solve Poisson's equation.
-    It combines neural networks with the governing equations and boundary conditions of Poisson's equation
+    This class implements a PENN approach to solve diffusion-reaction equation.
+    It combines neural networks with the governing equations and boundary conditions of diffusion-reaction equation
     for numerical solution of partial differential equations. The model uses a Multi-Layer Perceptron (MLP)
     as the base network structure, computes partial derivatives through automatic differentiation to satisfy
     PDE constraints, and supports comparison with Finite Element Method (FEM) results.
@@ -26,7 +25,7 @@ class PoissonPENNModel(ComputationalModel):
     Parameters:
         options(dict): If None, default parameters from get_options() will be used.
             Configuration dictionary containing:
-            - pde(int or PoissonPDEDataT): PDE definition;
+            - pde(int or DiffusionReactionPDEDataT): PDE definition;
             - scaling_function(callable): The scaling_function is a function that satisfies the boundary conditions, default is None;
             - mesh_size(int): Number of grid points along each dimension;
             - lr(float): Learning rate;
@@ -43,7 +42,7 @@ class PoissonPENNModel(ComputationalModel):
     Attributes:
         options(dict): Collection of model configuration parameters.
 
-        pde(PoissonPDEDataT): Poisson's equation problem definition object containing equation parameters, boundary conditions, 
+        pde(DiffusionReactionPDEDataT): diffusion-reaction equation problem definition object containing equation parameters, boundary conditions, 
             and source terms.
 
         gd(int): Geometric dimension (1D, 2D, or 3D) of the problem domain.
@@ -78,8 +77,6 @@ class PoissonPENNModel(ComputationalModel):
         
         pred(TensorLike): Final prediction results.
 
-        solution_flag(bool): Mark exact solution as nonexistent. Default is True.
-
     Methods:
         get_options(): Get default configuration parameters for the model.
         
@@ -90,7 +87,7 @@ class PoissonPENNModel(ComputationalModel):
         set_mesh(): Create computational mesh.
         
         set_steplr(): Set the learning rate scheduler.
-=
+
         shape_function(): Compute shape function values at given points.
 
         scaling_function(): Compute scaling function values at given points.
@@ -99,15 +96,11 @@ class PoissonPENNModel(ComputationalModel):
 
         predict(): Make predictions using the trained network.
 
-        fem(): Solve Poisson's equation using Finite Element Method (FEM) for comparison 
-            if PDE don't have an analytical solution.
+        fem(): Solve diffusion-reaction equation using Finite Element Method (FEM) for comparison.
 
         run(): Start training the model.
 
         show(): Visualize the solution results.
-
-    Reference:
-        https://wnesm678i4.feishu.cn/wiki/Xc2iw6mDUiOBZCkQtFcczVcZnW9?from=from_copylink
 
     Examples:
         >>> from fealpy.backend import bm
@@ -147,10 +140,10 @@ class PoissonPENNModel(ComputationalModel):
             options(dict): Dictionary containing all configuration parameters with parameter names as keys and default values
         """
         import argparse
-        parser = argparse.ArgumentParser(description="Poisson equation solver using PENN.")
+        parser = argparse.ArgumentParser(description="diffusion-reaction equation solver using PENN.")
 
-        parser.add_argument('--pde', default=12, type=int,
-                            help="Built-in PDE example ID (1, 2, 6, 8, 9) for different Poisson problems, default is 8.")
+        parser.add_argument('--pde', default=3, type=int,
+                            help="Built-in PDE example ID (1, 3) for different diffusion-reaction problems, default is 3.")
 
         parser.add_argument('--scaling_function', default=None, 
                             help="The caling_function is a function that satisfies the boundary conditions, default is None.")
@@ -158,8 +151,8 @@ class PoissonPENNModel(ComputationalModel):
         parser.add_argument('--mesh_size', default=30, type=int,
                             help='Number of grid points along each dimension, default is 30.')
 
-        parser.add_argument('--hidden_size', default=(50, 50), type=tuple,
-                            help='Default hidden sizes, default is (50, 50).')
+        parser.add_argument('--hidden_size', default=(50, 50, 50, 50), type=tuple,
+                            help='Default hidden sizes, default is (50, 50, 50, 50).')
 
         parser.add_argument('--optimizer', default="Adam",  type=str,
                             help="Optimizer to use for training, default is Adam,  options are 'Adam' , 'SGD'.")
@@ -168,7 +161,7 @@ class PoissonPENNModel(ComputationalModel):
                             help="Activation function, default is 'LogSigmoid', " \
                             "options are 'Tanh', 'ReLU', 'LeakyReLU', 'Sigmoid', 'LogSigmoid', 'Softmax', 'LogSoftmax'.")
 
-        parser.add_argument('--lr', default=0.005, type=float,
+        parser.add_argument('--lr', default=0.001, type=float,
                             help='Learning rate for the optimizer, default is 0.005.')
 
         parser.add_argument('--step_size', default=0, type=int,
@@ -177,8 +170,8 @@ class PoissonPENNModel(ComputationalModel):
         parser.add_argument('--gamma', default=0.99, type=float,
                             help='Multiplicative factor of learning rate decay. Default: 0.99.')
 
-        parser.add_argument('--epochs', default=1000, type=int,
-                            help='Number of training epochs, default is 1000.')
+        parser.add_argument('--epochs', default=5000, type=int,
+                            help='Number of training epochs, default is 5000.')
 
         parser.add_argument('--pbar_log', default=True, type=bool,
                             help='Whether to show progress bar, default is True')
@@ -188,18 +181,18 @@ class PoissonPENNModel(ComputationalModel):
         options = vars(parser.parse_args())
         return options
     
-    def set_pde(self, pde: Union[PoissonPDEDataT, int]=1):
+    def set_pde(self, pde: Union[DiffusionReactionPDEDataT, int]=3):
         """Initialize the PDE problem definition
         
-        Sets up the Poisson's equation problem to be solved by the model based on 
+        Sets up the diffusion-reaction equation problem to be solved by the model based on 
         the input PDE object or built-in example ID.
         
         Parameters:
-            pde(Union[PoissonPDEDataT, int]): Either a Poisson's equation problem object or the ID (integer) of a predefined example. 
-                If an integer, the corresponding predefined Poisson's equation problem is retrieved from the PDE model manager.
+            pde(Union[DiffusionReactionPDEDataT, int]): Either a diffusion-reaction equation problem object or the ID (integer) of a predefined example. 
+                If an integer, the corresponding predefined diffusion-reaction equation problem is retrieved from the PDE model manager.
         """  
         if isinstance(pde, int):
-            self.pde = PDEModelManager('poisson').get_example(pde)
+            self.pde = PDEModelManager('diffusion_reaction').get_example(pde)
         else:
             self.pde = pde 
         self.gd = self.pde.geo_dimension()
@@ -361,12 +354,13 @@ class PoissonPENNModel(ComputationalModel):
             The residual is calculated as Δu where Δ is the Laplacian operator.
         """     
         grad_u = gradient(pred, p, create_graph=True)  ## (npde, dim)
+        reaction = (self.pde.reaction_coef() * pred).reshape(-1, 1)
         laplacian = bm.zeros(pred.shape[0], 1)   
         
         for i in range(p.shape[-1]):
             u_ii = gradient(grad_u[..., i], p, create_graph=True, split=True)[i]   # computes ∂²u/∂x_i²
             laplacian += u_ii
-        val = laplacian 
+        val = laplacian - reaction
         return val 
     
     def run(self):
@@ -396,21 +390,11 @@ class PoissonPENNModel(ComputationalModel):
                 self.steplr.step()
 
             if epoch % 100  == 0:
-                try:
-                    if hasattr(self.pde, 'solution'):
-                        self.solution_flag = True
-                        error = self.net.estimate_error(self.pde.solution, mesh, coordtype='c')
-                        self.error.append(error.item())
-                except NotImplementedError:
-                    # The exact solution is unknown，so Mark exact solution as nonexistent .
-                    self.solution_flag = False
                 self.Loss.append(loss.item())
                 self.logger.info(f"epoch: {epoch}, Loss: {loss.item():.6f}")
         
         self.pred = pred
         self.tmr.send(f'PENN training completed time')
-        if self.solution_flag:
-            next(self.tmr)
 
     def predict(self, p: TensorLike) -> TensorLike:
         """Make predictions using the trained network.
@@ -429,8 +413,7 @@ class PoissonPENNModel(ComputationalModel):
         return pred.detach().numpy()
     
     def fem(self):
-        """Solve Poisson's equation using Finite Element Method (FEM) for comparison
-        if PDE don't have an analytical solution.
+        """Solve diffusion-reaction equation using Finite Element Method (FEM) for comparison
         
         Returns:
             uh(TensorLike): FEM solution results
@@ -440,7 +423,7 @@ class PoissonPENNModel(ComputationalModel):
         """
         from fealpy.functionspace import LagrangeFESpace
         from fealpy.fem import BilinearForm, LinearForm
-        from fealpy.fem  import ScalarDiffusionIntegrator, ScalarSourceIntegrator
+        from fealpy.fem  import ScalarDiffusionIntegrator, ScalarSourceIntegrator, ScalarMassIntegrator
         from fealpy.fem import DirichletBC
         from fealpy.solver import spsolve
 
@@ -449,8 +432,10 @@ class PoissonPENNModel(ComputationalModel):
         p = 1
         q = p + 2
         space = LagrangeFESpace(mesh, p)
+        r = pde.reaction_coef()
         S = BilinearForm(space)
         S.add_integrator(ScalarDiffusionIntegrator(q=q))
+        S.add_integrator(ScalarMassIntegrator(coef=r, q=q))
         A = S.assembly()
 
         b = LinearForm(space)
@@ -478,86 +463,64 @@ class PoissonPENNModel(ComputationalModel):
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import Axes3D
 
+        node = self.mesh.entity('node').detach().numpy()
+        net_pred = self.pred.flatten().detach().numpy()
+        fem_pred = self.fem().detach().numpy()
+        er = net_pred - fem_pred
+
         # plot loss curve
         fig = plt.figure()
         ax1 = fig.add_subplot()
 
         Loss = bm.tensor(self.Loss)
         ax1.plot(bm.log10(Loss).numpy(), 'r-', linewidth=2)
-        ax1.set_title('PENN Training Loss', fontsize=12)
+        ax1.set_title('Training Loss', fontsize=12)
         ax1.set_xlabel('training epochs*100', fontsize=10)
         ax1.set_ylabel('log10(Loss)', fontsize=10)
         ax1.grid(True)
+        fig = plt.figure()
+        if self.gd == 1:
+            ax2 = fig.add_subplot()
+            ax2.plot(node, net_pred, 'b-', label="PENN Prediction")
+            ax2.plot(node, fem_pred, 'y--', label="FEM Prediction")
+            ax2.plot(node, er, 'r--', label="Error: PENN - FEM")
+            plt.xlabel('x', fontsize=12)
+            plt.ylabel('u(x)', fontsize=12)
+            plt.title('Comparison between PENN and FEM Solution', fontsize=14)
+            plt.legend(fontsize=12)
+            plt.grid(True, linestyle=':')
 
-        # PENN vs exact error 
-        if self.solution_flag:
-            fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
-            error = bm.log10(bm.tensor(self.error)).numpy()
-            axes.plot(error, 'b--', linewidth=2)
-            axes.set_title('L2 Error between PENN Solution and Exact Solution', fontsize=12)
-            axes.set_ylabel('log10(Error)', fontsize=10)
-            axes.set_xlabel('training epochs*100', fontsize=10)
-            axes.grid(True)
+        elif self.gd == 2:
+            ax2 = fig.add_subplot(131, projection="3d")
+            surf1 = ax2.plot_trisurf(node[:, 0], node[:, 1], net_pred,
+                                     cmap='viridis', edgecolor='k', linewidth=0.2, alpha=0.8)
+            ax2.set_title('PENN Solution', fontsize=12)
+            ax2.set_xlabel('x', fontsize=10)
+            ax2.set_ylabel('y', fontsize=10)    
+            ax2.set_zlabel('u(x,y)', fontsize=10)
+            fig.colorbar(surf1, ax=ax2, shrink=0.5, label='value')
 
-        if self.gd <= 2:
-            node = self.mesh.entity('node')
-            net_pred = self.pred.flatten().detach().numpy()
+            ax3 = fig.add_subplot(132, projection="3d")
+            surf2 = ax3.plot_trisurf(node[:, 0], node[:, 1],
+                                     fem_pred, cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
+            ax3.set_title('FEM Solution', fontsize=12)
+            ax3.set_xlabel('x', fontsize=10)
+            ax3.set_ylabel('y', fontsize=10)    
+            ax3.set_zlabel('u(x,y)', fontsize=10)
+            fig.colorbar(surf2, ax=ax3, shrink=0.5, label='value')
 
-            if self.solution_flag:
-                u_true = self.pde.solution(node).detach().numpy()   # exact solution
-            else:
-                u_true = self.fem().detach().numpy()  # FEM solution
-            er = net_pred - u_true
-            fig = plt.figure()
-            node = node.detach().numpy()
+            ax4 = fig.add_subplot(133, projection="3d")
+            surf3 = ax4.plot_trisurf(node[:, 0], node[:, 1],
+                                     er, cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
+            ax4.set_title('Error: PENN - FEM', fontsize=12)
+            ax4.set_xlabel('x', fontsize=10)
+            ax4.set_ylabel('y', fontsize=10)    
+            ax4.set_zlabel('u(x,y)', fontsize=10)
+            fig.colorbar(surf3, ax=ax4, shrink=0.5, label='value')
 
-            if self.gd == 1:
-                ax2 = fig.add_subplot()
-                ax2.plot(node, net_pred, 'b-', label="PENN Prediction")
-                ax2.plot(node, u_true, 'y--', label="Exact\FEM Prediction")
-                ax2.plot(node, er, 'r--', label="Error: PENN - Exact\FEM")
-                plt.xlabel('x', fontsize=12)
-                plt.ylabel('u(x)', fontsize=12)
-                plt.title('Comparison between PENN and Exact\FEM Solution', fontsize=14)
-                plt.legend(fontsize=12)
-                plt.grid(True, linestyle=':')
-
-            elif self.gd == 2:
-                ax2 = fig.add_subplot(131, projection="3d")
-                surf1 = ax2.plot_trisurf(node[:, 0], node[:, 1], net_pred,
-                                        cmap='viridis', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax2.set_title('PENN Solution', fontsize=12)
-                ax2.set_xlabel('x', fontsize=10)
-                ax2.set_ylabel('y', fontsize=10)    
-                ax2.set_zlabel('u(x,y)', fontsize=10)
-                fig.colorbar(surf1, ax=ax2, shrink=0.5, label='value')
-
-                ax3 = fig.add_subplot(132, projection="3d")
-                surf2 = ax3.plot_trisurf(node[:, 0], node[:, 1],
-                                        u_true, cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax3.set_xlabel('x', fontsize=10)
-                ax3.set_ylabel('y', fontsize=10)    
-                ax3.set_zlabel('u(x,y)', fontsize=10)
-                fig.colorbar(surf2, ax=ax3, shrink=0.5, label='value')
-
-                ax4 = fig.add_subplot(133, projection="3d")
-                surf3 = ax4.plot_trisurf(node[:, 0], node[:, 1],
-                                        er, cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax4.set_xlabel('x', fontsize=10)
-                ax4.set_ylabel('y', fontsize=10)    
-                ax4.set_zlabel('u(x,y)', fontsize=10)
-                fig.colorbar(surf3, ax=ax4, shrink=0.5, label='value')
-
-                if self.solution_flag:
-                    ax3.set_title('Exact Solution')
-                    ax4.set_title('Error: PENN - Exact', fontsize=12)
-                    plt.suptitle('Comparison between PENN and Exact Solution')
-                else:
-                    ax3.set_title('FEM Solution')
-                    ax4.set_title('Error: PENN - FEM', fontsize=12)
-                    plt.suptitle('Comparison between PENN and FEM Solution')
-                plt.legend(fontsize=12)
-                plt.grid(True, linestyle=':')
+            fig.suptitle('Comparison between PENN and FEM Solution', fontsize=14)
+            plt.legend(fontsize=12)
+            plt.grid(True, linestyle=':')
 
         plt.tight_layout()      
         plt.show() 
