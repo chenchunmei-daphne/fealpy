@@ -24,7 +24,7 @@ class Truss(CNodeType):
     """
     TITLE: str = "桁架有限元模型"
     PATH: str = "有限元.方程离散"
-    DESC: str = "组装全局刚度矩阵K并应用边界条件，输出K与F"
+    DESC: str = "组装全局刚度矩阵K并应用边界条件, 输出K与F"
 
     INPUT_SLOTS = [
         PortConf("space", DataType.SPACE, 1, desc="拉格朗日函数空间", title="标量函数空间"),
