@@ -23,14 +23,14 @@ class Truss3dData(CNodeType):
         - This is a data source node; it does not require upstream inputs.
         - All outputs are concrete values, not function objects.
     """
-    TITLE: str = "桁架问题数据"
+    TITLE: str = "桁架问题"
     PATH: str = "网格.构造"
     DESC: str = "根据参数生成25杆桁架的网格、外载荷向量与边界自由度索引。"
 
     INPUT_SLOTS = [
         PortConf("p", DataType.FLOAT, 0, desc="沿y轴的集中力", title="载荷"),
         PortConf("top_z", DataType.FLOAT, 0, desc="受力层Z坐标", title="受力层Z"),
-        PortConf("fixed_nodes", DataType.TENSOR, 0, desc="固定约束的节点", title="固定节点"),
+        PortConf("fixed_nodes", DataType.TENSOR, 1, desc="固定约束的节点", title="固定节点"),
     ]
 
     OUTPUT_SLOTS = [
