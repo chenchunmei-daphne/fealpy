@@ -82,6 +82,33 @@ class UDecoupling(CNodeType):
         theta_xyz = u[:, :3]
 
         return uh, theta_xyz
+    
+class BeamPostprocess(CNodeType):
+    r"""
+    Postprocess the beam element results to extract nodal displacements and rotations.
+
+    Inputs:
+    out (tensor): Combined displacement vector of all nodes. Each node contains six components in the order
+    [u, θx, v, θy, w, θz].
+    Outputs:
+    uh (tensor): Nodal translational displacements (u, v, w).
+    theta_xyz (tensor): Nodal rotational displacements (θx, θy, θz).
+    """
+    TITLE: str = "梁单元后处理"
+    PATH: str = "后处理.梁单元"
+    DESC: str = "提取梁单元的节点位移和旋转"
+    INPUT_SLOTS = [
+        PortConf("out", DataType.TENSOR, 1, desc="六个自由度的位移", title="结果")
+    ]
+    OUTPUT_SLOTS = [   
+        PortConf("uh", DataType.TENSOR, desc="节点平动位移", title="平动位移"),
+        PortConf("theta_xyz", DataType.TENSOR, desc="节点转动位移", title="转动位移"),
+    ]
+    @staticmethod
+    def run(out):   
+        uh = out[::2]
+        theta = out[1::2]
+        return uh, theta
 
 class StrainStressPostprocess(CNodeType):
     r"""
