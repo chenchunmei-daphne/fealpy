@@ -1,46 +1,77 @@
 from fealpy.backend import backend_manager as bm
-from .vector_decomposition import VectorDecomposition
 
 class GradientReconstruct:
     def __init__(self, mesh):
         self.mesh = mesh
+        self.Sf = self.mesh.edge_normal()  
+        self.e2c = self.mesh.edge_to_cell() 
 
-    def old_reconstruct(self, uh):
-        Sf = VectorDecomposition(self.mesh).outer_normal_vector_calculation()
-        cell2cell = self.mesh.cell_to_cell()
-        S = self.mesh.entity_measure("cell")
-        uh_nb = uh[cell2cell]           
-        uh_f = 0.5 * (uh[:, None] + uh_nb) 
-        grad = bm.sum(uh_f[:, :, None] * Sf, axis=1) / S[:, None]
-        grad_nb = grad[cell2cell]  # (NC, 3, 2)
-        grad_f = 0.5 * (grad[:, None, :] + grad_nb)  # (NC, 3, 2)
-        return grad_f 
-
-    def reconstruct(self, uh):
-        Sf = self.mesh.edge_normal()
-        e2c = self.mesh.edge_to_cell()  # (NE, 3)，其中 e2c[:, 0], e2c[:, 1] 是邻接单元
-        cell_measure = self.mesh.entity_measure('cell')  # (NC,)
+    def GreenGauss(self, U):
+        GD = U[..., None].shape[1]
         NC = self.mesh.number_of_cells()
-        NE = self.mesh.number_of_edges()
-        GD = 2
+        if GD == 1:
+            grad_U = bm.zeros((NC, 2))
+            uh_i = U[self.e2c[:, 0]]  
+            uh_j = U[self.e2c[:, 1]]  
+            uh_f = 0.5 * (uh_i + uh_j) 
+            bm.add.at(grad_U, self.e2c[:, 0], uh_f[:, None] * self.Sf)
+            bm.add.at(grad_U, self.e2c[:, 1], -uh_f[:, None] * self.Sf)
+        elif GD == 2:
+            grad_u = bm.zeros((NC, 2))
+            uh_i = U[self.e2c[:, 0],0]  
+            uh_j = U[self.e2c[:, 1],0]  
+            uh_f = 0.5 * (uh_i + uh_j) 
+            bm.add.at(grad_u, self.e2c[:, 0], uh_f[:, None] * self.Sf)
+            bm.add.at(grad_u, self.e2c[:, 1], -uh_f[:, None] * self.Sf)
+            grad_v = bm.zeros((NC, 2))
+            vh_i = U[self.e2c[:, 0],1]  
+            vh_j = U[self.e2c[:, 1],1]  
+            vh_f = 0.5 * (vh_i + vh_j) 
+            bm.add.at(grad_v, self.e2c[:, 0], vh_f[:, None] * self.Sf)
+            bm.add.at(grad_v, self.e2c[:, 1], -vh_f[:, None] * self.Sf)
+            grad_U = bm.stack([grad_u,grad_v], axis=1)
+        return grad_U
 
-        # --- Step 1: 计算边上的数值解 uh_f = (u_i + u_j)/2 ---
-        uh_i = uh[e2c[:, 0]]
-        uh_j = uh[e2c[:, 1]]
-        uh_f = 0.5 * (uh_i + uh_j)  # (NE,)
-        grad_u = bm.zeros((NC, GD))  # (NC, 2)
-        for i in range(NE):
-            c0 = e2c[i, 0]
-            c1 = e2c[i, 1]
-            Sf_i = Sf[i]
-            grad_u[c0] += uh_f[i] * Sf_i
-            # 边界边只出现一次，需要跳过第二次添加
-            if c0 != c1:
-                grad_u[c1] -= uh_f[i] * Sf_i
-        grad_u /= cell_measure[..., None]  # (NC, 2)，每个单元的梯度
-        # --- Step 4: 插值得到边上的重构梯度 ---
+    def test(self, U):
+        cell_measure = self.mesh.entity_measure('cell')
+        grad_U = self.GreenGauss(U)
+        grad_U /= cell_measure[:, None]  # (NC, 2)
+        return grad_U
+
+    def AverageGradientreDirichlet(self, U, gd):
+        cell_measure = self.mesh.entity_measure('cell')
+        grad_U = self.GreenGauss(U)
+        bdedge = self.mesh.boundary_face_index()
+        epoints = self.mesh.entity_barycenter('face')[bdedge, :]
+        bdu = gd(epoints)
+        GD = U[..., None].shape[1]
+        if GD == 1:
+            bm.add.at(grad_U, self.e2c[bdedge, 0], bdu[:, None] * self.Sf[bdedge, :])
+            grad_U /= cell_measure[:, None]  # (NC, 2)
+        elif GD == 2:
+            bm.add.at(grad_U[:,0,:], self.e2c[bdedge, 0], bdu[:, 0, None] * self.Sf[bdedge, :])
+            bm.add.at(grad_U[:,1,:], self.e2c[bdedge, 0], bdu[:, 1, None] * self.Sf[bdedge, :])
+            grad_U /= cell_measure[:, None, None]
+        return grad_U
+
+    def AverageGradientreNeumann(self, uh, gd):
+        cell_measure = self.mesh.entity_measure('cell')
+        face_measure = self.mesh.entity_measure('face')
+        grad_u = self.GreenGauss(uh)
+        LNE = self.mesh.number_of_vertices_of_cells()
+        bdedge = self.mesh.boundary_face_index()
+        d = 2*cell_measure[self.e2c[bdedge, 0]]/(LNE*face_measure[bdedge])
+        bduh = uh[self.e2c[bdedge, 0]]
+        gf = gd(self.mesh.entity_barycenter('face')[bdedge, :])
+        bdu = bduh + gf * d
+        bm.add.at(grad_u, self.e2c[bdedge, 0], bdu[:, None] * self.Sf[bdedge, :])
+        grad_u /= cell_measure[:, None]  # (NC, 2)
+        return grad_u
+
+    def reconstruct(self, grad_u):
+        e2c = self.mesh.edge_to_cell()
         grad_i = grad_u[e2c[:, 0]]  # (NE, 2)
         grad_j = grad_u[e2c[:, 1]]  # (NE, 2)
         grad_f = 0.5 * (grad_i + grad_j)  # (NE, 2)
 
-        return grad_f  # 每条边上重构出来的梯度，方向与矢量一致
+        return grad_f

@@ -17,8 +17,8 @@ class PLBFGS(Optimizer):
     def __init__(self, options) -> None:
         super().__init__(options)
 
-        self.S: Deque[bm.float64] = deque()
-        self.Y: Deque[bm.float64] = deque()
+        self.S: Deque[bm.float64] = deque(maxlen=options["NumGrad"])
+        self.Y: Deque[bm.float64] = deque(maxlen=options["NumGrad"])
         self.P = options["Preconditioner"]
 
     @classmethod
@@ -67,7 +67,6 @@ class PLBFGS(Optimizer):
 
         return r
 
-
     def run(self):
         options = self.options
         x = options["x0"]
@@ -109,22 +108,22 @@ class PLBFGS(Optimizer):
             if diff < options["FunValDiff"]:
                 print(f"Convergence achieved after {i} iterations, the function value difference is less than FunValDiff")
                 flag = 1
-                break
+                return x, f, g, flag
 
             if gnorm < options["NormGradTol"]:
                 print(f"The norm of current gradient is {gnorm}, which is smaller than the tolerance {options['NormGradTol']}")
                 flag = 1
-                break
+                return x, f, g, flag
 
             if alpha <= options["StepLengthTol"]:
                 if j == 0:
                     flag = 2
-                    break
+                    return x, f, g, flag
                 else:
                     alpha = 1
                     ND = x.shape[0]
-                    self.S = deque()
-                    self.Y = deque()
+                    self.S.clear()
+                    self.Y.clear()
                     j = 0
                     continue
                         
@@ -135,7 +134,7 @@ class PLBFGS(Optimizer):
             if sty < 0:
                 print(f'bfgs: sty <= 0, skipping BFGS update at iteration {i}.')
             else:
-                if i < options["NumGrad"]:
+                if len(self.S) < options["NumGrad"]:
                     self.S.append(s)
                     self.Y.append(y)
                     j += 1
@@ -147,4 +146,5 @@ class PLBFGS(Optimizer):
 
         if flag == 0:
             flag = 3
+        print(f"Reached the Maximum number of iterations {options['MaxIters']} times")
         return x, f, g, flag
