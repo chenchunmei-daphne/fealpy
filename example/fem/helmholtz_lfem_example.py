@@ -10,17 +10,17 @@ parser = argparse.ArgumentParser(description=
         """)
 
 parser.add_argument('--backend',
-                    default='numpy', type=str,
+                    default='pytorch', type=str,
                     help='Default backend is numpy')
 
 parser.add_argument('--pde',
-                    default=3, type=int,
+                    default=1, type=int,
                     help='Name of the PDE model, default is 1')
 
-parser.add_argument('--nx', default=20, type=int,
+parser.add_argument('--nx', default=30, type=int,
                     help='Number of subdivisions in x direction for mesh, default=20')
 
-parser.add_argument('--ny', default=20, type=int,
+parser.add_argument('--ny', default=30, type=int,
                     help='Number of subdivisions in y direction for mesh, default=20')
 
 parser.add_argument('--init_mesh',
@@ -59,5 +59,5 @@ options = vars(parser.parse_args())
 bm.set_backend(options['backend'])
 
 model = HelmholtzLFEMModel(options)
-model.run()
-model.run['error']()
+model.run(plot=True)  # Run the model and plot the results
+# model.run['error']()

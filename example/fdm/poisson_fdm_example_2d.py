@@ -10,7 +10,7 @@ from fealpy.solver import spsolve
 import matplotlib.pyplot as plt
 
 
-pde = PDEModelManager('poisson').get_example('sinsin')
+pde = PDEModelManager('poisson').get_example(2)
 # print(pde.__doc__)
 
 domain = pde.domain()

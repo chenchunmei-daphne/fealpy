@@ -185,7 +185,7 @@ class HelmholtzLFEMModel(ComputationalModel):
         return uh
     
     @variantmethod
-    def run(self):
+    def run(self, plot=False):
         """
         """
         A, F = self.linear_system[f"{self.method}"](self.mesh, self.p)
@@ -200,23 +200,24 @@ class HelmholtzLFEMModel(ComputationalModel):
         z1 = uh.real
         z2 = u_exact.real
 
-        fig = plt.figure(figsize=(14, 6))
-        ax1 = fig.add_subplot(1, 2, 1, projection='3d')
-        ax1.plot_trisurf(x, y, z1, cmap='viridis', linewidth=0.2)
-        ax1.set_title(f"{self.method} Numerical Solution")
-        ax1.set_xlabel("x")
-        ax1.set_ylabel("y")
-        ax1.set_zlabel("Re(u)")
+        if plot:
+            fig = plt.figure(figsize=(14, 6))
+            ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+            ax1.plot_trisurf(x, y, z1, cmap='viridis', linewidth=0.2)
+            ax1.set_title(f"{self.method} Numerical Solution")
+            ax1.set_xlabel("x")
+            ax1.set_ylabel("y")
+            ax1.set_zlabel("Re(u)")
 
-        ax2 = fig.add_subplot(1, 2, 2, projection='3d')
-        ax2.plot_trisurf(x, y, z2, cmap='plasma', linewidth=0.2)
-        ax2.set_title("Exact Solution")
-        ax2.set_xlabel("x")
-        ax2.set_ylabel("y")
-        ax2.set_zlabel("Re(u)")
+            ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+            ax2.plot_trisurf(x, y, z2, cmap='plasma', linewidth=0.2)
+            ax2.set_title("Exact Solution")
+            ax2.set_xlabel("x")
+            ax2.set_ylabel("y")
+            ax2.set_zlabel("Re(u)")
 
-        plt.tight_layout()
-        plt.show()
+            plt.tight_layout()
+            plt.show()
 
         return uh, error
         
@@ -238,7 +239,7 @@ class HelmholtzLFEMModel(ComputationalModel):
         uh = self.space.function(dtype=bm.complex128)
         uh[:] = self.solve[self.solver](A, F)
         err_std = self.mesh.error(self.pde.solution, uh.value)
-        pointwise_err_std = bm.abs(uh - u_exact)
+        pointwise_err_std = bm.abs(uh[:] - u_exact)
 
         # -------- Interior Penalty FEM --------
         self.method = "penalty"
@@ -246,7 +247,7 @@ class HelmholtzLFEMModel(ComputationalModel):
         val = self.space.function(dtype=bm.complex128)
         val[:] = self.solve[self.solver](A, F)
         err_ip = self.mesh.error(self.pde.solution, val.value)
-        pointwise_err_ip = bm.abs(val - u_exact)
+        pointwise_err_ip = bm.abs(val[:] - u_exact)
 
         # -------- Plotting --------
         fig = plt.figure(figsize=(18, 5))
@@ -278,4 +279,3 @@ class HelmholtzLFEMModel(ComputationalModel):
 
         plt.tight_layout()
         plt.show()
-

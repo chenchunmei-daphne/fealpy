@@ -14,6 +14,13 @@ from fealpy.ml import gradient, optimizers, activations
 from fealpy.ml.modules import Solution
 from fealpy.ml.sampler import BoxBoundarySampler, ISampler
 
+import time
+from fealpy.functionspace import LagrangeFESpace
+from fealpy.fem import BilinearForm, LinearForm
+from fealpy.fem import ScalarDiffusionIntegrator, ScalarMassIntegrator
+from fealpy.fem import ScalarRobinBCIntegrator, ScalarSourceIntegrator, ScalarRobinSourceIntegrator
+from fealpy.solver import cg
+
 
 class HelmholtzPINNModel(ComputationalModel):
     """Physics-Informed Neural Network (PINN) model for solving Helmholtz equations.
@@ -123,6 +130,13 @@ class HelmholtzPINNModel(ComputationalModel):
         self.set_pde(self.options['pde'])  # PDE 
         self.set_mesh(self.options['mesh_size']) 
         self.set_network()
+
+        self.fem_func = None
+        self.fem_solution = None
+        self.fem_space = None
+        self.fem_solve_time = None
+        self.train_total_time = None
+        self.train_avg_time = None
 
     @classmethod
     def get_options(cls):
@@ -252,7 +266,7 @@ class HelmholtzPINNModel(ComputationalModel):
             gd = self.gd
             self.mesh_size = (mesh_size, ) * gd
             cell_size = tuple(x - 1 for x in self.mesh_size)
-            self.mesh = self.pde.init_mesh(*cell_size)
+            self.mesh = self.pde.init_mesh['uniform_tri'](*cell_size)
         else:
             self.mesh = mesh
 
@@ -364,6 +378,46 @@ class HelmholtzPINNModel(ComputationalModel):
             val = g_hat - g
 
         return val
+    
+    def fem(self):
+        """Solve Helmholtz equation using standard FEM (Lagrange P1) for comparison.
+        
+        Uses HelmholtzLFEMModel with 'standard' method to solve the PDE.
+        """
+        import time
+        
+        # 创建 HelmholtzLFEMModel 的配置选项
+        fem_options = {
+            'pbar_log': self.pbar_log,
+            'log_level': self.log_level,
+            'pde': self.pde,  # 直接使用已经设置好的 pde
+            'init_mesh': 'uniform_tri',  # 使用相同的网格
+            'nx':  self.options['mesh_size']-1,
+            'ny':  self.options['mesh_size']-1,
+            'space_degree': 1,
+            'wave_number': self.k,
+            'gamma': 0.0,  # standard method 不使用 penalty
+            'solver': 'direct',
+            'method': 'standard'
+        }
+        
+        # 导入 HelmholtzLFEMModel
+        from fealpy.fem import HelmholtzLFEMModel
+        
+        # 创建 FEM 模型并运行
+        fem_model = HelmholtzLFEMModel(fem_options)
+        
+        t0 = time.time()
+        uh, _ = fem_model.run(plot=False)
+        self.fem_solve_time = time.time() - t0
+        
+        # # 保存 FEM 结果
+        # self.fem_solution = uh
+        # self.fem_space = fem_model.space
+        # self.fem_func = fem_model.space.function(uh)
+        
+        return uh
+    
 
     def run(self):
         """Execute training process.
@@ -393,7 +447,10 @@ class HelmholtzPINNModel(ComputationalModel):
         w = self.weights
         mesh = self.mesh
 
+        train_start = time.time()
+
         for epoch in range(self.epochs+1):
+            train_start_epoch = time.time()
             self.optimizer.zero_grad()
 
             # 采样点
@@ -427,17 +484,21 @@ class HelmholtzPINNModel(ComputationalModel):
             self.optimizer.step()  
             if self.steplr is not None:
                 self.steplr.step()
-
+            train_end_epoch = time.time()
             if epoch % 100 == 0:
                 error = self.net.estimate_error(self.pde.solution, mesh, coordtype='c', compare='real')
                 self.error_real.append(error.detach().numpy())
                 self.Loss.append(loss.item())
-                self.logger.info(f"epoch: {epoch}, Loss: {loss.item():.6f}")  
+                time_epoch = train_end_epoch - train_start_epoch
+                self.logger.info(f"epoch: {epoch}, Loss: {loss.item():.6e}, Time: {time_epoch:.2f}s")  
 
                 if self.complex:
                     error_i = self.net.estimate_error(self.pde.solution, mesh, coordtype='c', compare='imag')
                     self.error_imag.append(error_i.detach().numpy()) 
-
+        train_end = time.time()
+        self.train_total_time = train_end - train_start
+        self.train_avg_time = self.train_total_time / (self.epochs + 1)
+        # self.logger.info(f"PINN Total training time: {self.train_total_time:.2f}s, Average time per epoch: {self.train_avg_time:.2f}s")
         tmr.send(f'PINN training time')
         next(tmr)
 
@@ -451,145 +512,282 @@ class HelmholtzPINNModel(ComputationalModel):
             TensorLike: Network predictions (complex tensor when complex=True).
         """
         return self.net(p)
-
+    
     def show(self):
-        """Visualize training results and solution comparisons.
+        """Visualize training loss, error curves, and compare PINN with FEM and exact solution.
         
-        Notes:
-            Visualizations include:
-            1. Training loss history
-            2. Real/imaginary error history
-            3. 1D/2D solution comparisons
-            
-            Complex-valued solution handling:
-            - For 2D: Separate plots for real/imaginary components of true/predicted solutions
-            - Error plots show both real and imaginary components
+        Saves figures and result statistics to a subfolder named with timestamp
+        in the current working directory.
         """
         import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        from datetime import datetime
+        import numpy as np
+        import os
 
-        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(8, 6))
+        base_dir = r"D:\chen\fealpy\example\ml\Helmholtz_result"
+        time_str = datetime.now().strftime("%m%d%H%M")
+        folder_name = os.path.join(base_dir, f"helmholtz_result_{time_str}")
+        os.makedirs(folder_name, exist_ok=True)
+
+        # 所有文件路径加上子文件夹前缀
+        result_file = os.path.join(folder_name, f"helmholtz_result_{time_str}.txt")
+        loss_file   = os.path.join(folder_name, f"helmholtz_loss_{time_str}.png")
+        comp_file   = os.path.join(folder_name, f"helmholtz_comparison_{time_str}.png")
+        err_file    = os.path.join(folder_name, f"helmholtz_error_{time_str}.png")
+
+        # ================== 1. 训练损失与误差曲线 ==================
+        fig1, axes = plt.subplots(nrows=1, ncols=2, figsize=(8, 6))
         Loss = bm.log10(bm.tensor(self.Loss)).numpy()
 
-        # plot loss curve
         axes[0].plot(Loss, 'r-', linewidth=2)
         axes[0].set_title('Training Loss', fontsize=12)
         axes[0].set_xlabel('training epochs*100', fontsize=10)
         axes[0].set_ylabel('log10(Loss)', fontsize=10)
         axes[0].grid(True)
 
-        # plot real and imaginary error curves
         error_real = bm.log10(bm.tensor(self.error_real)).numpy()
-        error_imag = bm.log10(bm.tensor(self.error_imag)).numpy()
+        error_imag = bm.log10(bm.tensor(self.error_imag)).numpy() if self.error_imag else None
         axes[1].plot(error_real, 'b-', linewidth=2, label='Real Part Error')
-        if self.error_imag != []:
+        if error_imag is not None:
             axes[1].plot(error_imag, 'g--', linewidth=2, label='Imag Part Error')
-        axes[1].set_title('L2 Error between PINN Solution and Exact Solution', fontsize=12)
+        axes[1].set_title('L2 Error between PINN and Exact', fontsize=12)
         axes[1].set_ylabel('log10(Error)', fontsize=10)
         axes[1].set_xlabel('training epochs*100', fontsize=10)
         axes[1].grid(True)
         axes[1].legend()
+        fig1.tight_layout()
+        fig1.savefig(loss_file)
+        plt.close(fig1)
 
-        if self.gd <= 2:
-            mesh = self.mesh
-            node = mesh.entity('node')
 
-            u_pred = self.net(node)  # PINN solution
-            u_true = self.pde.solution(node)   # exact solution
-            node = node.detach().numpy()
+        # ================== 在网格节点上计算各解 ==================
+        node = self.mesh.entity('node')
+        t0 = time.time()
+        self.net.eval()
+        u_pinn = self.net(node).detach()          # 形状 (N, ) 或 (N, 1)
+        if u_pinn.ndim > 1:
+            u_pinn = u_pinn.flatten()
+        pinn_predict_time = time.time() - t0
 
-            u_pred_r = bm.real(u_pred).detach().numpy().flatten()
-            u_true_r = bm.real(u_true).detach().numpy().flatten()
-            if self.error_imag != []:
-                u_pred_i = bm.imag(u_pred).detach().numpy().flatten()
-                u_true_i = bm.imag(u_true).detach().numpy().flatten()
+        u_exact = self.pde.solution(node)         # 真解
+        if u_exact.ndim > 1:
+            u_exact = u_exact.flatten()
+        u_fem = self.fem()                 # FEM 解（节点值）
+        if u_fem.ndim > 1:
+            u_fem = u_fem.flatten()
 
-            if self.gd == 1:
-                fig = plt.figure()
-                plt.plot(node, u_true_r, 'b-', linewidth=2, label='Real Part of Exact  Solution')
-                plt.plot(node, u_pred_r, 'g--', linewidth=2, label='Real Part of PINN Prediction')
-                plt.plot(node, u_pred_r-u_true_r, 'r--', linewidth=2, label='Real Error: PINN - Exact')
-                if self.error_imag != []:
-                    plt.plot(node, u_true_i, 'g-', linewidth=2, label='Imag Part of Exact  Solution')
-                    plt.plot(node, u_pred_i, 'y--', linewidth=2, label='Imag Part of PINN Prediction')
-                    plt.plot(node, u_pred_i-u_true_i, 'r--', linewidth=2, label='Imag Error: PINN - Exact')
-                plt.xlabel('x', fontsize=12)
-                plt.ylabel('u(x)', fontsize=12)
-                plt.title('Comparison between PINN and Exact Solution', fontsize=14)
-                plt.legend(fontsize=12)
-                plt.grid(True, linestyle=':')
+        # 计算三种误差（复数值）
+        error_pinn_fem = u_pinn - u_fem
+        error_pinn_exact = u_pinn - u_exact
+        error_fem_exact = u_fem - u_exact
+
+        # 计算误差统计量（分别对实部和虚部）
+        def compute_stats(err):
+            err = err.detach().numpy()
+            real = err.real
+            imag = err.imag
+            stats = {
+                'real_mae': np.mean(np.abs(real)),
+                'real_max': np.max(np.abs(real)),
+                'real_rmse': np.sqrt(np.mean(real**2)),
+                'imag_mae': np.mean(np.abs(imag)),
+                'imag_max': np.max(np.abs(imag)),
+                'imag_rmse': np.sqrt(np.mean(imag**2)),
+                'complex_mae': np.mean(np.abs(err)),
+                'complex_max': np.max(np.abs(err)),
+                'complex_rmse': np.sqrt(np.mean(np.abs(err)**2)),
+            }
+            return stats
+
+        stats_pinn_fem = compute_stats(error_pinn_fem)
+        stats_pinn_exact = compute_stats(error_pinn_exact)
+        stats_fem_exact = compute_stats(error_fem_exact)
+        para = sum(p.numel() for p in self.net.parameters())
+
+        # ================== 4. 打印时间信息 ==================
+        print("\n========== Timing ==========")
+        print(f"FEM solve time          : {self.fem_solve_time:.6f} s")
+        print(f"PINN prediction time    : {pinn_predict_time:.6f} s")
+        print(f"PINN training total time: {self.train_total_time:.2f} s")
+        print(f"PINN training avg/step  : {self.train_avg_time:.6f} s")
+        print(f"PINN parameters: {para}")
+        print(f"Mesh Node:{node.shape[0]}")
+        print("============================\n")
+
+        # ================== 5. 绘制解对比图 ==================
+        node_np = node.detach().numpy()
+        u_pinn_np = u_pinn.detach().numpy()
+        u_fem_np = u_fem.detach().numpy()
+        u_exact_np = u_exact.detach().numpy()
+
+        if self.gd == 2:
+            x = node_np[:, 0]
+            y = node_np[:, 1]
+            fig2 = plt.figure(figsize=(15, 10))
+            if self.complex:
+                nrows, ncols = 2, 3
             else:
-                fig = plt.figure()
-                # real part of PINN solution
-                ax1_3d = fig.add_subplot(131, projection='3d')
-                surf1 = ax1_3d.plot_trisurf(
-                    node[:, 0], node[:, 1], u_pred_r,
-                    cmap='viridis', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax1_3d.set_title('PINN Solution of Real')
-                ax1_3d.set_xlabel('X')
-                ax1_3d.set_ylabel('Y')
-                ax1_3d.set_zlabel('u(x,y)')
-                fig.colorbar(surf1, ax=ax1_3d, shrink=0.5, label='Value')
+                nrows, ncols = 1, 3
 
-                # real part of exact solution
-                ax2_3d = fig.add_subplot(132, projection='3d')
-                surf2 = ax2_3d.plot_trisurf(
-                    node[:, 0], node[:, 1], u_true_r,
-                    cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax2_3d.set_title('Exact Solution of Real')
-                ax2_3d.set_xlabel('X')
-                ax2_3d.set_ylabel('Y')
-                ax2_3d.set_zlabel('u(x,y)')
-                fig.colorbar(surf2, ax=ax2_3d, shrink=0.5, label='Value')
+            # 实部
+            ax1 = fig2.add_subplot(nrows, ncols, 1, projection='3d')
+            ax1.plot_trisurf(x, y, u_pinn_np.real, cmap='viridis', linewidth=0.2)
+            ax1.set_title('PINN (Real)')
+            ax1.set_xlabel('x'); ax1.set_ylabel('y')
 
-                # real error
-                ax3_3d = fig.add_subplot(133, projection='3d')
-                surf3 = ax3_3d.plot_trisurf(
-                    node[:, 0], node[:, 1], u_pred_r-u_true_r,
-                    cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                ax3_3d.set_title('Error: PINN - Exact')
-                ax3_3d.set_xlabel('X')
-                ax3_3d.set_ylabel('Y')
-                ax3_3d.set_zlabel('u(x,y)')
-                fig.colorbar(surf3, ax=ax3_3d, shrink=0.5, label='Value')
+            ax2 = fig2.add_subplot(nrows, ncols, 2, projection='3d')
+            ax2.plot_trisurf(x, y, u_fem_np.real, cmap='plasma', linewidth=0.2)
+            ax2.set_title('FEM (Real)')
+            ax2.set_xlabel('x'); ax2.set_ylabel('y')
 
-                plt.suptitle('Comparison between PINN and Exact Solution of Real')
+            ax3 = fig2.add_subplot(nrows, ncols, 3, projection='3d')
+            ax3.plot_trisurf(x, y, u_exact_np.real, cmap='coolwarm', linewidth=0.2)
+            ax3.set_title('Exact (Real)')
+            ax3.set_xlabel('x'); ax3.set_ylabel('y')
 
-                if self.error_imag != []:
-                    fig = plt.figure()
-                    ax1_3d = fig.add_subplot(131, projection='3d')
-                    surf1 = ax1_3d.plot_trisurf(
-                        node[:, 0], node[:, 1], u_pred_i,
-                        cmap='viridis', edgecolor='k', linewidth=0.2, alpha=0.8)
-                    ax1_3d.set_title('PINN Solution of Imag')
-                    ax1_3d.set_xlabel('X')
-                    ax1_3d.set_ylabel('Y')
-                    ax1_3d.set_zlabel('u(x,y)')
-                    fig.colorbar(surf1, ax=ax1_3d, shrink=0.5, label='Value')
+            if self.complex:
+                ax4 = fig2.add_subplot(nrows, ncols, 4, projection='3d')
+                ax4.plot_trisurf(x, y, u_pinn_np.imag, cmap='viridis', linewidth=0.2)
+                ax4.set_title('PINN (Imag)')
+                ax4.set_xlabel('x'); ax4.set_ylabel('y')
 
-                    # imag part of exact solution
-                    ax2_3d = fig.add_subplot(132, projection='3d')
-                    surf2 = ax2_3d.plot_trisurf(
-                        node[:, 0], node[:, 1], u_true_i,
-                        cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                    ax2_3d.set_title('Exact   Solution of Imag')
-                    ax2_3d.set_xlabel('X')
-                    ax2_3d.set_ylabel('Y')
-                    ax2_3d.set_zlabel('u(x,y)')
-                    fig.colorbar(surf2, ax=ax2_3d, shrink=0.5, label='Value')
+                ax5 = fig2.add_subplot(nrows, ncols, 5, projection='3d')
+                ax5.plot_trisurf(x, y, u_fem_np.imag, cmap='plasma', linewidth=0.2)
+                ax5.set_title('FEM (Imag)')
+                ax5.set_xlabel('x'); ax5.set_ylabel('y')
 
-                    # imag error
-                    ax3_3d = fig.add_subplot(133, projection='3d')
-                    surf3 = ax3_3d.plot_trisurf(
-                        node[:, 0], node[:, 1], u_pred_i-u_true_i,
-                        cmap='plasma', edgecolor='k', linewidth=0.2, alpha=0.8)
-                    ax3_3d.set_title('Error: PINN - Exact')
-                    ax3_3d.set_xlabel('X')
-                    ax3_3d.set_ylabel('Y')
-                    ax3_3d.set_zlabel('u(x,y)')
-                    fig.colorbar(surf3, ax=ax3_3d, shrink=0.5, label='Value')
+                ax6 = fig2.add_subplot(nrows, ncols, 6, projection='3d')
+                ax6.plot_trisurf(x, y, u_exact_np.imag, cmap='coolwarm', linewidth=0.2)
+                ax6.set_title('Exact (Imag)')
+                ax6.set_xlabel('x'); ax6.set_ylabel('y')
 
-                    plt.suptitle('Comparison between PINN and Exact Solution of Imag')
+            fig2.tight_layout()
+            fig2.savefig(comp_file)
+            plt.close(fig2)
 
-        plt.tight_layout()      
-        plt.show()  
+        elif self.gd == 1:
+            fig2 = plt.figure(figsize=(10, 6))
+            plt.plot(node_np, u_pinn_np.real, 'b-', label='PINN Real')
+            plt.plot(node_np, u_fem_np.real, 'g--', label='FEM Real')
+            plt.plot(node_np, u_exact_np.real, 'r-.', label='Exact Real')
+            if self.complex:
+                plt.plot(node_np, u_pinn_np.imag, 'c-', label='PINN Imag')
+                plt.plot(node_np, u_fem_np.imag, 'm--', label='FEM Imag')
+                plt.plot(node_np, u_exact_np.imag, 'y-.', label='Exact Imag')
+            plt.xlabel('x')
+            plt.ylabel('u(x)')
+            plt.title('1D Solution Comparison')
+            plt.legend()
+            plt.grid(True)
+            fig2.tight_layout()
+            fig2.savefig(comp_file)
+            plt.close(fig2)
 
+        # ================== 6. 绘制误差分布图 ==================
+        fig3 = plt.figure(figsize=(15, 10))
+        if self.gd == 2:
+            if self.complex:
+                # 实部误差：PINN - Exact
+                ax1 = fig3.add_subplot(2, 3, 1, projection='3d')
+                ax1.plot_trisurf(x, y, error_pinn_exact.real, cmap='RdBu_r', linewidth=0.2)
+                ax1.set_title('PINN-Exact (Real)')
+                # 虚部
+                ax2 = fig3.add_subplot(2, 3, 2, projection='3d')
+                ax2.plot_trisurf(x, y, error_pinn_exact.imag, cmap='RdBu_r', linewidth=0.2)
+                ax2.set_title('PINN-Exact (Imag)')
+                # 模
+                ax3 = fig3.add_subplot(2, 3, 3, projection='3d')
+                ax3.plot_trisurf(x, y, np.abs(error_pinn_exact), cmap='hot', linewidth=0.2)
+                ax3.set_title('|PINN-Exact|')
+
+                # FEM-Exact
+                ax4 = fig3.add_subplot(2, 3, 4, projection='3d')
+                ax4.plot_trisurf(x, y, error_fem_exact.real, cmap='RdBu_r', linewidth=0.2)
+                ax4.set_title('FEM-Exact (Real)')
+                ax5 = fig3.add_subplot(2, 3, 5, projection='3d')
+                ax5.plot_trisurf(x, y, error_fem_exact.imag, cmap='RdBu_r', linewidth=0.2)
+                ax5.set_title('FEM-Exact (Imag)')
+                ax6 = fig3.add_subplot(2, 3, 6, projection='3d')
+                ax6.plot_trisurf(x, y, np.abs(error_fem_exact), cmap='hot', linewidth=0.2)
+                ax6.set_title('|FEM-Exact|')
+            else:
+                ax1 = fig3.add_subplot(1, 2, 1, projection='3d')
+                ax1.plot_trisurf(x, y, error_pinn_exact, cmap='RdBu_r', linewidth=0.2)
+                ax1.set_title('PINN-Exact')
+                ax2 = fig3.add_subplot(1, 2, 2, projection='3d')
+                ax2.plot_trisurf(x, y, error_fem_exact, cmap='RdBu_r', linewidth=0.2)
+                ax2.set_title('FEM-Exact')
+        else:
+            # 1D 误差曲线
+            plt.plot(node_np, error_pinn_exact.real, 'b-', label='PINN-Exact Real')
+            if self.complex:
+                plt.plot(node_np, error_pinn_exact.imag, 'b--', label='PINN-Exact Imag')
+            plt.plot(node_np, error_fem_exact.real, 'r-', label='FEM-Exact Real')
+            if self.complex:
+                plt.plot(node_np, error_fem_exact.imag, 'r--', label='FEM-Exact Imag')
+            plt.xlabel('x')
+            plt.ylabel('Error')
+            plt.legend()
+            plt.grid(True)
+        fig3.tight_layout()
+        fig3.savefig(err_file)
+        plt.close(fig3)
+
+        # ================== 7. 保存结果到文本文件（包含 options 和误差统计） ==================
+        with open(result_file, 'w') as f:
+            f.write("========== Helmholtz PINN Results ==========\n")
+            f.write("Options:\n")
+            for key, val in self.options.items():
+                f.write(f"  {key}: {val}\n")
+            f.write("\n--- Error Statistics (based on nodal values) ---\n")
+            f.write("\nError: PINN - FEM\n")
+            f.write(f"  Real MAE  : {stats_pinn_fem['real_mae']:.6e}\n")
+            f.write(f"  Real Max  : {stats_pinn_fem['real_max']:.6e}\n")
+            f.write(f"  Real RMSE : {stats_pinn_fem['real_rmse']:.6e}\n")
+            if self.complex:
+                f.write(f"  Imag MAE  : {stats_pinn_fem['imag_mae']:.6e}\n")
+                f.write(f"  Imag Max  : {stats_pinn_fem['imag_max']:.6e}\n")
+                f.write(f"  Imag RMSE : {stats_pinn_fem['imag_rmse']:.6e}\n")
+                f.write(f"  Complex MAE : {stats_pinn_fem['complex_mae']:.6e}\n")
+                f.write(f"  Complex Max : {stats_pinn_fem['complex_max']:.6e}\n")
+                f.write(f"  Complex RMSE: {stats_pinn_fem['complex_rmse']:.6e}\n")
+
+            f.write("\nError: PINN - Exact\n")
+            f.write(f"  Real MAE  : {stats_pinn_exact['real_mae']:.6e}\n")
+            f.write(f"  Real Max  : {stats_pinn_exact['real_max']:.6e}\n")
+            f.write(f"  Real RMSE : {stats_pinn_exact['real_rmse']:.6e}\n")
+            if self.complex:
+                f.write(f"  Imag MAE  : {stats_pinn_exact['imag_mae']:.6e}\n")
+                f.write(f"  Imag Max  : {stats_pinn_exact['imag_max']:.6e}\n")
+                f.write(f"  Imag RMSE : {stats_pinn_exact['imag_rmse']:.6e}\n")
+                f.write(f"  Complex MAE : {stats_pinn_exact['complex_mae']:.6e}\n")
+                f.write(f"  Complex Max : {stats_pinn_exact['complex_max']:.6e}\n")
+                f.write(f"  Complex RMSE: {stats_pinn_exact['complex_rmse']:.6e}\n")
+
+            f.write("\nError: FEM - Exact\n")
+            f.write(f"  Real MAE  : {stats_fem_exact['real_mae']:.6e}\n")
+            f.write(f"  Real Max  : {stats_fem_exact['real_max']:.6e}\n")
+            f.write(f"  Real RMSE : {stats_fem_exact['real_rmse']:.6e}\n")
+            if self.complex:
+                f.write(f"  Imag MAE  : {stats_fem_exact['imag_mae']:.6e}\n")
+                f.write(f"  Imag Max  : {stats_fem_exact['imag_max']:.6e}\n")
+                f.write(f"  Imag RMSE : {stats_fem_exact['imag_rmse']:.6e}\n")
+                f.write(f"  Complex MAE : {stats_fem_exact['complex_mae']:.6e}\n")
+                f.write(f"  Complex Max : {stats_fem_exact['complex_max']:.6e}\n")
+                f.write(f"  Complex RMSE: {stats_fem_exact['complex_rmse']:.6e}\n")
+
+            f.write("\n--- Timing ---\n")
+            f.write(f"FEM solve time           : {self.fem_solve_time:.6f} s\n")
+            f.write(f"PINN prediction time     : {pinn_predict_time:.6f} s\n")
+            f.write(f"PINN training total time : {self.train_total_time:.2f} s\n")
+            f.write(f"PINN training avg/step   : {self.train_avg_time:.6f} s\n")
+            f.write(f"PINN parameters: {para} \n")
+            f.write(f"Number mesh Node:{node.shape[0]}\n")
+            f.write("============================================\n")
+
+        print(f"Results saved to folder: {folder_name}")
+        print(f"  - {result_file}")
+        print(f"  - {loss_file}")
+        print(f"  - {comp_file}")
+        print(f"  - {err_file}")

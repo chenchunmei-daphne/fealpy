@@ -442,7 +442,7 @@ class PoissonPENNModel(ComputationalModel):
         from fealpy.fem import BilinearForm, LinearForm
         from fealpy.fem  import ScalarDiffusionIntegrator, ScalarSourceIntegrator
         from fealpy.fem import DirichletBC
-        from fealpy.solver import spsolve
+        from fealpy.solver import cg
 
         pde = self.pde
         mesh = self.mesh
@@ -468,7 +468,7 @@ class PoissonPENNModel(ComputationalModel):
             A, F = DirichletBC(space=space, gd=pde.dirichlet, threshold=bcf).apply(A, F)
         else:
             A, F = DirichletBC(space=space, gd=pde.dirichlet).apply(A, F)
-        uh = spsolve(A, F)
+        uh = cg(A, F)
         self.tmr.send(f'FEM solving time')
         next(self.tmr)
         return uh

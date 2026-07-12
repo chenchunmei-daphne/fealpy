@@ -9,7 +9,7 @@ from fealpy.fdm import DirichletBC
 from fealpy.solver import spsolve
 import matplotlib.pyplot as plt
 
-pde = PDEModelManager('poisson').get_example('sin')
+pde = PDEModelManager('poisson').get_example(1)
 # print(pde.__doc__)
 domain = pde.domain()
 

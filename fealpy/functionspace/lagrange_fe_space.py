@@ -220,7 +220,11 @@ class LagrangeFESpace(FunctionSpace, Generic[_MT]):
             TD = bc.shape[-1] - 1
         phi = self.basis(bc, index=index)
         e2dof = self.dof.entity_to_dof(TD, index=index)
-        val = bm.einsum('cql, ...cl -> ...cq', phi, uh[..., e2dof])
+        coef = uh[..., e2dof]
+        dtype = bm.result_type(phi, coef)
+        phi = bm.astype(phi, dtype, copy=False)
+        coef = bm.astype(coef, dtype, copy=False)
+        val = bm.einsum('cql, ...cl -> ...cq', phi, coef)
         return val
 
     @barycentric
